@@ -76,17 +76,6 @@ struct song_info {
 	pthread_cond_t m_resumeCond;
 }; struct song_info cur_song;
 
-// Debouncer vars
-
-struct button_data {
-	int buttonState;		// current reading from input pin
-	int lastButtonState = LOW;	// previous reading from input
-	long lastDebounceTime = 0;	// last time button was toggled
-	long debounceDelay = 50;	// debounce time; increase if flicker
-	int buttonType;			// button is either play/prev/next/pause/info/quit
-	int pin;
-}; //struct button_data pushButtons;
-
 // TODO use this somewhere... because right now it's not being used.
 struct play_status {
 	int is_playing;
@@ -123,23 +112,9 @@ const int D3 = 6;	//
 // Global lcd handle:
 static int lcdHandle;
 
-// Push button vars:
-const int playButtonPin 0;
-const int prevButtonPin 1;
-const int nextButtonPin 2;
-const int infoButtonPin 5;
-const int quitButtonPin 7;
-
-const int buttonPins[] = { 
-	playButtonPin,
-	prevButtonPin,
-	nextButtonPin,
-	infoButtonPin,
-	quitButtonPin
-	};
-
 // Global vars
 int num_songs; // current number of songs.
+long debounceDelay = 50; // debounce time; increase if flicker
 
 /*
 // pthread

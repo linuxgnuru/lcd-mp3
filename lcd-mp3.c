@@ -59,6 +59,30 @@
 
 #include "lcd-mp3.h"
 
+// Push button vars:
+#define playButtonPin 0
+#define prevButtonPin 1
+#define nextButtonPin 2
+#define infoButtonPin 5
+#define quitButtonPin 7
+
+const int buttonPins[] = {
+	playButtonPin,
+	prevButtonPin,
+	nextButtonPin,
+	infoButtonPin,
+	quitButtonPin
+	};
+
+// Debouncer vars
+struct button_info {
+	int buttonState;	/* current reading from input pin */
+	int lastButtonState;	/* previous reading from input */
+	long lastDebounceTime;	/* last time button was toggled */
+	int buttonType;		/* button is either play/prev/next/pause/info/quit */
+	int pin;
+}; typedef struct button_info tempButton;
+
 // linked list / playlist functions
 
 int playlist_init(playlist_t *playlistptr)
@@ -117,6 +141,7 @@ int playlist_get_song(int index, void **songptr, playlist_t *playlistptr)
   }
   return 1;
 }
+
 /*
 int playlist_song_count(playlist_t *playlistptr)
 {
@@ -134,10 +159,13 @@ int playlist_song_count(playlist_t *playlistptr)
 // NOTE:
 //	The following was borrowed from http://www.arduino.cc/en/Tutorial/Debounce
 //	which states the example is in the public domain; but I still want to give them props.
-void deBouncer(button_data &cur_button)
+void deBouncer()
 {
-	int reading = digitalRead(cur_button.pin);
-
+	struct button_info cur_button;
+	int reading;
+	
+	cur_button = tempButton;
+	reading = digitalRead(cur_button.pin);
 	// check to see if you just pressed the button
 	// (i.e. the input went from LOW to HIGH), and you've waited
 	// long enough since the last press to ignore any noise:
@@ -147,7 +175,7 @@ void deBouncer(button_data &cur_button)
 		// reset the debouncing timer
 		cur_button.lastDebounceTime = millis();
 	}
-	if ((millis() - cur_button.lastDebounceTime) > cur_button.debounceDelay)
+	if ((millis() - cur_button.lastDebounceTime) > debounceDelay)
 	{
 		// whatever the reading is at, it's been there for longer than
 		// the debounce delay, so take it as the actual current state.
@@ -157,6 +185,7 @@ void deBouncer(button_data &cur_button)
 	}
 	// save the reading.  Next time through the loop, it'll be the lastButtonState:
 	cur_button.lastButtonState = reading;
+	tempButton = cur_button;
 }
 
 // mount (if cmd == 1, do not attempt to unmount)
@@ -221,7 +250,7 @@ playlist_t reReadPlaylist(char *dir_name)
 	}
 	closedir(d);
 	pthread_mutex_lock(&cur_song.pauseMutex);
-	cur_song.num_songs = index;
+	num_songs = index;
 	//printf("index: %d\n", index);
 	pthread_mutex_unlock(&cur_song.pauseMutex);
 	/*
@@ -552,11 +581,11 @@ int main(int argc, char **argv)
 {
 	pthread_t song_thread;
 	playlist_t cur_playlist;
-	button_data play_b;
-	button_data prev_b;
-	button_data next_b;
-	button_data info_b;
-	button_data quit_b;
+	struct button_info play_b;
+	struct button_info prev_b;
+	struct button_info next_b;
+	struct button_info info_b;
+	struct button_info quit_b;
 	char *basec, *bname;
 	char *string;
 	char lcd_clear[] = "                ";
@@ -580,6 +609,16 @@ int main(int argc, char **argv)
 	next_b.pin = nextButtonPin;
 	info_b.pin = infoButtonPin;
 	quit_b.pin = quitButtonPin;
+	play_b.lastButtonState = LOW;
+	prev_b.lastButtonState = LOW;
+	next_b.lastButtonState = LOW;
+	info_b.lastButtonState = LOW;
+	quit_b.lastButtonState = LOW;
+	play_b.lastDebounceTime = 0;
+	prev_b.lastDebounceTime = 0;
+	next_b.lastDebounceTime = 0;
+	info_b.lastDebounceTime = 0;
+	quit_b.lastDebounceTime = 0;
 	playlist_init(&cur_playlist);
 	//init_song(cur_song);
 	cur_song.song_over = FALSE;
@@ -760,7 +799,9 @@ int main(int argc, char **argv)
 					scrollMessage_secondRow();
 				if (useButtonFlag == TRUE)
 				{
-					deBouncer(play_b);
+					tempButton = play_b;
+					deBouncer();
+					play_b = tempButton;
 					if (play_b.buttonState == LOW)
 					{
 						if (cur_song.play_status == PAUSE)
@@ -768,7 +809,9 @@ int main(int argc, char **argv)
 						else
 							pauseMe();
 					}
-					deBouncer(prev_b);
+					tempButton = prev_b;
+					deBouncer();
+					prev_b = tempButton;
 					if (prev_b.buttonState == LOW)
 					{
 						if (song_index - 1 != 0)
@@ -777,7 +820,9 @@ int main(int argc, char **argv)
 							song_index--;
 						}
 					}
-					deBouncer(next_b);
+					tempButton = next_b;
+					deBouncer();
+					next_b = tempButton;
 					if (next_b.buttonState == LOW)
 					{
 						if (song_index + 1 < num_songs)
@@ -786,7 +831,9 @@ int main(int argc, char **argv)
 							song_index++;
 						}
 					}
-					deBouncer(info_b);
+					tempButton = info_b;
+					deBouncer();
+					info_b = tempButton;
 					if (info_b.buttonState == LOW)
 					{
 						// toggle what to display
@@ -798,7 +845,9 @@ int main(int argc, char **argv)
 						scroll_secondRow_flag = printLcdSecondRow();
 						pthread_mutex_unlock(&cur_song.pauseMutex);
 					}
-					deBouncer(quit_b);
+					tempButton = quit_b;
+					deBouncer();
+					quit_b = tempButton;
 					if (quit_b.buttonState == LOW)
 					{
 						quitMe();
