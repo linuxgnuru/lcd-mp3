@@ -74,15 +74,6 @@ const int buttonPins[] = {
 	quitButtonPin
 	};
 
-// Debouncer vars
-struct button_info {
-	int buttonState;	/* current reading from input pin */
-	int lastButtonState;	/* previous reading from input */
-	long lastDebounceTime;	/* last time button was toggled */
-	int buttonType;		/* button is either play/prev/next/pause/info/quit */
-	int pin;
-}; typedef struct button_info tempButton;
-
 // linked list / playlist functions
 
 int playlist_init(playlist_t *playlistptr)
@@ -159,7 +150,7 @@ int playlist_song_count(playlist_t *playlistptr)
 // NOTE:
 //	The following was borrowed from http://www.arduino.cc/en/Tutorial/Debounce
 //	which states the example is in the public domain; but I still want to give them props.
-void deBouncer()
+void deBouncer(void)
 {
 	struct button_info cur_button;
 	int reading;

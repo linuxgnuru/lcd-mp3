@@ -76,6 +76,15 @@ struct song_info {
 	pthread_cond_t m_resumeCond;
 }; struct song_info cur_song;
 
+// Debouncer vars
+struct button_info {
+	int buttonState;
+	int lastButtonState;
+	long lastDebounceTime;
+	int buttonType;
+	int pin;
+}; typedef struct button_info tempButton;
+
 // TODO use this somewhere... because right now it's not being used.
 struct play_status {
 	int is_playing;
