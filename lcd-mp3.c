@@ -21,6 +21,7 @@
  *	John Wiggins (jcwiggi@gmail.com)
  *
  *
+ *	05-12-2014	Minor changes; removed btnFlag
  *	02-12-2014	Removed everything regarding debouncing function; going back to old delay setup
  *	02-12-2014	Removed debouncing function and added it manually; having too many odd
  *			struct errors
@@ -72,7 +73,7 @@
 #define infoButtonPin 5
 #define quitButtonPin 7
 
-#define BTN_DELAY 50
+#define BTN_DELAY 30
 
 // --------- END USER MODIFIABLE VARS ---------
 
@@ -144,6 +145,7 @@ int playlist_get_song(int index, void **songptr, playlist_t *playlistptr)
 }
 
 /*
+// Not used.
 int playlist_song_count(playlist_t *playlistptr)
 {
 	playlist_node_t *cur;
@@ -157,7 +159,12 @@ int playlist_song_count(playlist_t *playlistptr)
 */
 
 /*
-// button debouncing stuff TODO
+
+   XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX
+  XXX THIS IS BROKEN; delete it in the future XXX
+   XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX
+
+// button debouncing stuff
 // NOTE:
 //	The following was borrowed from http://www.arduino.cc/en/Tutorial/Debounce
 //	which states the example is in the public domain; but I still want to give them props.
@@ -185,6 +192,9 @@ void deBouncer(int pin, int *buttonState, int *lastButtonState, long *lastDeboun
 	&lastButtonState = reading;
 }
 */
+
+// Mounting function; might use it in the future
+
 /*
 // mount (if cmd == 1, do not attempt to unmount)
 int mountToggle(int cmd, char *dir_name)
@@ -235,12 +245,6 @@ playlist_t reReadPlaylist(char *dir_name)
 				strcpy(string, dir_name);
 				strcat(string, "/");
 				strcat(string, dir->d_name);
-				//printf("song: %s\n", string);
-				//move(i, 0);
-				//printw("------------");
-				//move(i+1,0);
-				//printw("song: %s", string);
-				//i++;
 				playlist_add_song(index++, string, &new_playlist);
 			}
 		}
@@ -248,15 +252,7 @@ playlist_t reReadPlaylist(char *dir_name)
 	closedir(d);
 	pthread_mutex_lock(&cur_song.pauseMutex);
 	num_songs = index;
-	//printf("index: %d\n", index);
 	pthread_mutex_unlock(&cur_song.pauseMutex);
-	//move(26, 0);
-	//if (index == 0)
-	//{
-		//printw("---- 0 --- songs: %d", index);
-	//}
-	//else
-		//printw("songs: %d", index);
 	return new_playlist;
 }
 
@@ -588,14 +584,11 @@ int main(int argc, char **argv)
 	int useButtonFlag = TRUE;
 	int scroll_firstRow_flag, scroll_secondRow_flag;
 	int buttonState;
-	int btnFlag;
 	int btnCtr;
 
 	// Initializations
 	playlist_init(&cur_playlist);
-	//init_button(_b);
 	cur_song.song_over = FALSE;
-	btnFlag = FALSE;
 	scroll_firstRow_flag = scroll_secondRow_flag = FALSE;
 	if (argc > 1)
 	{
@@ -618,12 +611,11 @@ int main(int argc, char **argv)
 				if (string == NULL)
 					perror("malloc");
 				strcpy(string, argv[index]);
-				//printf("%d %d %s\n", argc, index, argv[index]);
 				playlist_add_song(index - 1, string, &cur_playlist);
 				num_songs = argc - 2;
-				//printf("%d\n", zzz++);
 			}
 		}
+		// for mount
 		/*
 		else if (strcmp(argv[1], "-usb") == 0)
 		{
@@ -657,21 +649,6 @@ int main(int argc, char **argv)
 	}
 	else
 		return usage(argv[0]);
-#ifdef fubarrrr
-	for (index = 1; index < num_songs; index++)
-	{
-		string = malloc(MAXDATALEN);
-		if (string == NULL)
-			perror("malloc");
-		playlist_get_song(index, &string, &cur_playlist);
-		if (string != NULL)
-		{
-			printf("%d: %s\n", index, string);
-		}
-	}
-#endif
-//#else
-//#ifdef RUNME
   	if (wiringPiSetup () == -1)
   	{
 	    fprintf(stdout, "oops: %s\n", strerror(errno));
@@ -719,7 +696,6 @@ int main(int argc, char **argv)
 	}
 	song_index = 1;
 	cur_song.play_status = PLAY;
-	//cur_song.num_songs = argc;
 	while (cur_song.play_status != QUIT && song_index < num_songs)
 	{
 		if (LCD_ONLY == FALSE)
@@ -776,10 +752,10 @@ int main(int argc, char **argv)
 					scrollMessage_secondRow();
 				if (useButtonFlag == TRUE)
 				{
+					btnCtr = 0;
 					buttonState = digitalRead(playButtonPin);
 					if (buttonState == LOW)
 					{
-						btnCtr = 0;
 						// check 3 times to make sure the button was actually pressed
 						for (i = 0; i < 3; i++)
 						{
@@ -788,20 +764,18 @@ int main(int argc, char **argv)
 								btnCtr++;
 							delay(BTN_DELAY);
 						}
-						btnFlag = (btnCtr >= 3 ? TRUE : FALSE);
 					}
-					if (btnFlag == TRUE)
+					if (btnCtr >= 3)
 					{
 						if (cur_song.play_status == PAUSE)
 							playMe();
 						else
 							pauseMe();
 					}
+					btnCtr = 0;
 					buttonState = digitalRead(prevButtonPin);
 					if (buttonState == LOW)
 					{
-						btnCtr = 0;
-						// check 3 times to make sure the button was actually pressed
 						for (i = 0; i < 3; i++)
 						{
 							buttonState = digitalRead(prevButtonPin);
@@ -809,9 +783,8 @@ int main(int argc, char **argv)
 								btnCtr++;
 							delay(BTN_DELAY);
 						}
-						btnFlag = (btnCtr >= 3 ? TRUE : FALSE);
 					}
-					if (btnFlag == TRUE)
+					if (btnCtr >= 3)
 					{
 						if (song_index - 1 != 0)
 						{
@@ -819,11 +792,10 @@ int main(int argc, char **argv)
 							song_index--;
 						}
 					}
+					btnCtr = 0;
 					buttonState = digitalRead(nextButtonPin);
 					if (buttonState == LOW)
 					{
-						btnCtr = 0;
-						// check 3 times to make sure the button was actually pressed
 						for (i = 0; i < 3; i++)
 						{
 							buttonState = digitalRead(nextButtonPin);
@@ -831,9 +803,8 @@ int main(int argc, char **argv)
 								btnCtr++;
 							delay(BTN_DELAY);
 						}
-						btnFlag = (btnCtr >= 3 ? TRUE : FALSE);
 					}
-					if (btnFlag == TRUE)
+					if (btnCtr >= 3)
 					{
 						if (song_index + 1 < num_songs)
 						{
@@ -841,11 +812,10 @@ int main(int argc, char **argv)
 							song_index++;
 						}
 					}
+					btnCtr = 0;
 					buttonState = digitalRead(infoButtonPin);
 					if (buttonState == LOW)
 					{
-						btnCtr = 0;
-						// check 3 times to make sure the button was actually pressed
 						for (i = 0; i < 3; i++)
 						{
 							buttonState = digitalRead(infoButtonPin);
@@ -853,9 +823,8 @@ int main(int argc, char **argv)
 								btnCtr++;
 							delay(BTN_DELAY);
 						}
-						btnFlag = (btnCtr >= 3 ? TRUE : FALSE);
 					}
-					if (btnFlag == TRUE)
+					if (btnCtr >= 3)
 					{
 						// toggle what to display
 						pthread_mutex_lock(&cur_song.pauseMutex);
@@ -866,11 +835,10 @@ int main(int argc, char **argv)
 						scroll_secondRow_flag = printLcdSecondRow();
 						pthread_mutex_unlock(&cur_song.pauseMutex);
 					}
+					btnCtr = 0;
 					buttonState = digitalRead(quitButtonPin);
 					if (buttonState == LOW)
 					{
-						btnCtr = 0;
-						// check 3 times to make sure the button was actually pressed
 						for (i = 0; i < 3; i++)
 						{
 							buttonState = digitalRead(quitButtonPin);
@@ -878,9 +846,8 @@ int main(int argc, char **argv)
 								btnCtr++;
 							delay(BTN_DELAY);
 						}
-						btnFlag = (btnCtr >= 3 ? TRUE : FALSE);
 					}
-					if (btnFlag == TRUE)
+					if (btnCtr >= 3)
 					{
 						quitMe();
 					}
@@ -1007,6 +974,5 @@ int main(int argc, char **argv)
 	lcdClear(lcdHandle);
 	if (LCD_ONLY == FALSE)
 		endwin();
-//#endif
 	return 0;
 }
