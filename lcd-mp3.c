@@ -9,7 +9,8 @@
  *	- wiringPi example code for lcd.c
  *	- http://hzqtc.github.io/2012/05/play-mp3-with-libmpg123-and-libao.html
  *	- http://www.arduino.cc/en/Tutorial/Debounce
- *	- many thanks to those who helped me out at StackExchange (http://raspberrypi.stackexchange.com/)
+ *	- many thanks to those who helped me out at StackExchange
+ *	  (http://raspberrypi.stackexchange.com/)
  *
  *      requires:
  *		ncurses
@@ -20,6 +21,9 @@
  *	John Wiggins (jcwiggi@gmail.com)
  *
  *
+ *	02-12-2014	Removed everything regarding debouncing function; going back to old delay setup
+ *	02-12-2014	Removed debouncing function and added it manually; having too many odd
+ *			struct errors
  *	29-11-2014	Tons of modifications:
  *			- added a mount/unmount USB (assuming /dev/sda1) option
  *			- added more argument options such as whole dir, and mount usb
@@ -59,12 +63,18 @@
 
 #include "lcd-mp3.h"
 
+// --------- BEGIN USER MODIFIABLE VARS ---------
+
 // Push button vars:
 #define playButtonPin 0
 #define prevButtonPin 1
 #define nextButtonPin 2
 #define infoButtonPin 5
 #define quitButtonPin 7
+
+#define BTN_DELAY 50
+
+// --------- END USER MODIFIABLE VARS ---------
 
 const int buttonPins[] = {
 	playButtonPin,
@@ -146,39 +156,36 @@ int playlist_song_count(playlist_t *playlistptr)
 }
 */
 
+/*
 // button debouncing stuff TODO
 // NOTE:
 //	The following was borrowed from http://www.arduino.cc/en/Tutorial/Debounce
 //	which states the example is in the public domain; but I still want to give them props.
-void deBouncer(void)
+void deBouncer(int pin, int *buttonState, int *lastButtonState, long *lastDebounceTime)
 {
-	struct button_info cur_button;
-	int reading;
-	
-	cur_button = tempButton;
-	reading = digitalRead(cur_button.pin);
+	int reading = digitalRead(pin);
 	// check to see if you just pressed the button
 	// (i.e. the input went from LOW to HIGH), and you've waited
 	// long enough since the last press to ignore any noise:
 	// if the swtich changed, due to noise or pressing:
-	if (reading != cur_button.lastButtonState)
+	if (reading != lastButtonState)
 	{
 		// reset the debouncing timer
-		cur_button.lastDebounceTime = millis();
+		&lastDebounceTime = millis();
 	}
-	if ((millis() - cur_button.lastDebounceTime) > debounceDelay)
+	if ((millis() - lastDebounceTime) > debounceDelay)
 	{
 		// whatever the reading is at, it's been there for longer than
 		// the debounce delay, so take it as the actual current state.
 		// if the button state has changed:
-		if (reading != cur_button.buttonState)
-			cur_button.buttonState = reading;
+		if (reading != buttonState)
+			&buttonState = reading;
 	}
 	// save the reading.  Next time through the loop, it'll be the lastButtonState:
-	cur_button.lastButtonState = reading;
-	tempButton = cur_button;
+	&lastButtonState = reading;
 }
-
+*/
+/*
 // mount (if cmd == 1, do not attempt to unmount)
 int mountToggle(int cmd, char *dir_name)
 {
@@ -199,6 +206,7 @@ int mountToggle(int cmd, char *dir_name)
 	else
 		return MOUNTED;
 }
+*/
 
 // if USB has been mounted, load in songs.
 playlist_t reReadPlaylist(char *dir_name)
@@ -228,13 +236,11 @@ playlist_t reReadPlaylist(char *dir_name)
 				strcat(string, "/");
 				strcat(string, dir->d_name);
 				//printf("song: %s\n", string);
-				/*
-				move(i, 0);
-				printw("------------");
-				move(i+1,0);
-				printw("song: %s", string);
-				i++;
-				*/
+				//move(i, 0);
+				//printw("------------");
+				//move(i+1,0);
+				//printw("song: %s", string);
+				//i++;
 				playlist_add_song(index++, string, &new_playlist);
 			}
 		}
@@ -244,15 +250,13 @@ playlist_t reReadPlaylist(char *dir_name)
 	num_songs = index;
 	//printf("index: %d\n", index);
 	pthread_mutex_unlock(&cur_song.pauseMutex);
-	/*
-	move(26, 0);
-	if (index == 0)
-	{
-		printw("---- 0 --- songs: %d", index);
-	}
-	else
-		printw("songs: %d", index);
-	*/
+	//move(26, 0);
+	//if (index == 0)
+	//{
+		//printw("---- 0 --- songs: %d", index);
+	//}
+	//else
+		//printw("songs: %d", index);
 	return new_playlist;
 }
 
@@ -441,9 +445,9 @@ int printLcdSecondRow()
 
 int usage(const char *progName)
 {
+	//"-usb [mount] "
 	fprintf(stderr, "Usage: %s [OPTION] "
-		"--help "
-		"-usb [mount] "
+		"--pins (shows what pins to use for buttons) "
 		"-dir [dir] "
 		"-songs [MP3 files]\n", progName);
 	return EXIT_FAILURE;
@@ -572,11 +576,6 @@ int main(int argc, char **argv)
 {
 	pthread_t song_thread;
 	playlist_t cur_playlist;
-	struct button_info play_b;
-	struct button_info prev_b;
-	struct button_info next_b;
-	struct button_info info_b;
-	struct button_info quit_b;
 	char *basec, *bname;
 	char *string;
 	char lcd_clear[] = "                ";
@@ -585,45 +584,30 @@ int main(int argc, char **argv)
 	int key;
 	int i;
 	int LCD_ONLY = FALSE;
-	int mountFlag = UNMOUNTED;
-	int useButtonFlag = FALSE;
+	//int mountFlag = UNMOUNTED;
+	int useButtonFlag = TRUE;
 	int scroll_firstRow_flag, scroll_secondRow_flag;
+	int buttonState;
+	int btnFlag;
+	int btnCtr;
 
 	// Initializations
-	play_b.buttonType = PLAY;
-	prev_b.buttonType = PREV;
-	next_b.buttonType = NEXT;
-	info_b.buttonType = INFO;
-	quit_b.buttonType = QUIT;
-	play_b.pin = playButtonPin;
-	prev_b.pin = prevButtonPin;
-	next_b.pin = nextButtonPin;
-	info_b.pin = infoButtonPin;
-	quit_b.pin = quitButtonPin;
-	play_b.lastButtonState = LOW;
-	prev_b.lastButtonState = LOW;
-	next_b.lastButtonState = LOW;
-	info_b.lastButtonState = LOW;
-	quit_b.lastButtonState = LOW;
-	play_b.lastDebounceTime = 0;
-	prev_b.lastDebounceTime = 0;
-	next_b.lastDebounceTime = 0;
-	info_b.lastDebounceTime = 0;
-	quit_b.lastDebounceTime = 0;
 	playlist_init(&cur_playlist);
-	//init_song(cur_song);
+	//init_button(_b);
 	cur_song.song_over = FALSE;
+	btnFlag = FALSE;
 	scroll_firstRow_flag = scroll_secondRow_flag = FALSE;
 	if (argc > 1)
 	{
-		if (strcmp(argv[1], "--help") == 0)
+		if (strcmp(argv[1], "--pins") == 0)
 		{
-			printf("Pins for buttons:\nButton Function\twiringPi\tBCM\n"
-			       "Play\t0\t17\n"
-			       "Prev\t1\t18\n"
-			       "Next\t2\t27\n"
-			       "Info\t5\t25\n"
-			       "Quit\t7\t4\n");
+			printf("Pins for buttons:\nFunction\twiringPi\tBCM\n"
+			       "--------\t--------\t---\n"
+			       "Play    \t0       \t17\n"
+			       "Prev    \t1       \t18\n"
+			       "Next    \t2       \t27\n"
+			       "Info    \t5       \t25\n"
+			       "Quit    \t7       \t4\n");
 			       return 1;
 		}
 		else if (strcmp(argv[1], "-songs") == 0)
@@ -640,6 +624,7 @@ int main(int argc, char **argv)
 				//printf("%d\n", zzz++);
 			}
 		}
+		/*
 		else if (strcmp(argv[1], "-usb") == 0)
 		{
 			mountFlag = mountToggle(1, argv[2]);
@@ -659,6 +644,7 @@ int main(int argc, char **argv)
 				return -2;
 			}
 		}
+		*/
 		else if (strcmp(argv[1], "-dir") == 0)
 		{
 			cur_playlist = reReadPlaylist(argv[2]);
@@ -790,20 +776,42 @@ int main(int argc, char **argv)
 					scrollMessage_secondRow();
 				if (useButtonFlag == TRUE)
 				{
-					tempButton = play_b;
-					deBouncer();
-					play_b = tempButton;
-					if (play_b.buttonState == LOW)
+					buttonState = digitalRead(playButtonPin);
+					if (buttonState == LOW)
+					{
+						btnCtr = 0;
+						// check 3 times to make sure the button was actually pressed
+						for (i = 0; i < 3; i++)
+						{
+							buttonState = digitalRead(playButtonPin);
+							if (buttonState == LOW)
+								btnCtr++;
+							delay(BTN_DELAY);
+						}
+						btnFlag = (btnCtr >= 3 ? TRUE : FALSE);
+					}
+					if (btnFlag == TRUE)
 					{
 						if (cur_song.play_status == PAUSE)
 							playMe();
 						else
 							pauseMe();
 					}
-					tempButton = prev_b;
-					deBouncer();
-					prev_b = tempButton;
-					if (prev_b.buttonState == LOW)
+					buttonState = digitalRead(prevButtonPin);
+					if (buttonState == LOW)
+					{
+						btnCtr = 0;
+						// check 3 times to make sure the button was actually pressed
+						for (i = 0; i < 3; i++)
+						{
+							buttonState = digitalRead(prevButtonPin);
+							if (buttonState == LOW)
+								btnCtr++;
+							delay(BTN_DELAY);
+						}
+						btnFlag = (btnCtr >= 3 ? TRUE : FALSE);
+					}
+					if (btnFlag == TRUE)
 					{
 						if (song_index - 1 != 0)
 						{
@@ -811,10 +819,21 @@ int main(int argc, char **argv)
 							song_index--;
 						}
 					}
-					tempButton = next_b;
-					deBouncer();
-					next_b = tempButton;
-					if (next_b.buttonState == LOW)
+					buttonState = digitalRead(nextButtonPin);
+					if (buttonState == LOW)
+					{
+						btnCtr = 0;
+						// check 3 times to make sure the button was actually pressed
+						for (i = 0; i < 3; i++)
+						{
+							buttonState = digitalRead(nextButtonPin);
+							if (buttonState == LOW)
+								btnCtr++;
+							delay(BTN_DELAY);
+						}
+						btnFlag = (btnCtr >= 3 ? TRUE : FALSE);
+					}
+					if (btnFlag == TRUE)
 					{
 						if (song_index + 1 < num_songs)
 						{
@@ -822,10 +841,21 @@ int main(int argc, char **argv)
 							song_index++;
 						}
 					}
-					tempButton = info_b;
-					deBouncer();
-					info_b = tempButton;
-					if (info_b.buttonState == LOW)
+					buttonState = digitalRead(infoButtonPin);
+					if (buttonState == LOW)
+					{
+						btnCtr = 0;
+						// check 3 times to make sure the button was actually pressed
+						for (i = 0; i < 3; i++)
+						{
+							buttonState = digitalRead(infoButtonPin);
+							if (buttonState == LOW)
+								btnCtr++;
+							delay(BTN_DELAY);
+						}
+						btnFlag = (btnCtr >= 3 ? TRUE : FALSE);
+					}
+					if (btnFlag == TRUE)
 					{
 						// toggle what to display
 						pthread_mutex_lock(&cur_song.pauseMutex);
@@ -836,10 +866,21 @@ int main(int argc, char **argv)
 						scroll_secondRow_flag = printLcdSecondRow();
 						pthread_mutex_unlock(&cur_song.pauseMutex);
 					}
-					tempButton = quit_b;
-					deBouncer();
-					quit_b = tempButton;
-					if (quit_b.buttonState == LOW)
+					buttonState = digitalRead(quitButtonPin);
+					if (buttonState == LOW)
+					{
+						btnCtr = 0;
+						// check 3 times to make sure the button was actually pressed
+						for (i = 0; i < 3; i++)
+						{
+							buttonState = digitalRead(quitButtonPin);
+							if (buttonState == LOW)
+								btnCtr++;
+							delay(BTN_DELAY);
+						}
+						btnFlag = (btnCtr >= 3 ? TRUE : FALSE);
+					}
+					if (btnFlag == TRUE)
 					{
 						quitMe();
 					}
