@@ -1,5 +1,4 @@
 // TODO
-// - work on prev/next/quit/info buttons while a song is paused
 
 /*
  *	lcd-mp3
@@ -70,12 +69,12 @@
 
 // --------- BEGIN USER MODIFIABLE VARS ---------
 
-// Push button vars:
-#define playButtonPin 0
-#define prevButtonPin 1
-#define nextButtonPin 2
-#define infoButtonPin 5
-#define quitButtonPin 7
+// GPIO pins (using wiringPi numbers)
+#define playButtonPin 0 // BCM 17
+#define prevButtonPin 1 // BCM 18
+#define nextButtonPin 2 // BCM 27
+#define infoButtonPin 5 // BCM 24
+#define quitButtonPin 7 // BCM 4
 
 #define BTN_DELAY 30
 
@@ -597,6 +596,8 @@ int main(int argc, char **argv)
 				return -1;
 			}
 		}
+		else
+			return usage(argv[0]);
 	}
 	else
 		return usage(argv[0]);
