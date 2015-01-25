@@ -2,6 +2,9 @@
 
 /*
  *	lcd-mp3
+ *
+ *	John Wiggins (jcwiggi@gmail.com)
+ *
  *	mp3 player with output to a 16x2 lcd display for song information
  *
  *	Portions of this code were borrowed from MANY other projects including (but limited to)
@@ -17,9 +20,9 @@
  *		wiringPi
  *		ao
  *		mpg123
- *	John Wiggins (jcwiggi@gmail.com)
  *
  *
+ *	25-01-2915	Added some LEDs to also indicate when paused and if info is on or not
  *	07-12-2014	Added the PAUSED text to the LCD when paused and disabled all other buttons while paused.
  *			FIXME need to allow user to quit program while paused. Removed unused/debug code
  *	06-12-2014	see if we can do something about the song being paused while next/prev/quit/info
@@ -70,11 +73,14 @@
 // --------- BEGIN USER MODIFIABLE VARS ---------
 
 // GPIO pins (using wiringPi numbers)
-#define playButtonPin 0 // BCM 17
-#define prevButtonPin 1 // BCM 18
-#define nextButtonPin 2 // BCM 27
-#define infoButtonPin 5 // BCM 24
-#define quitButtonPin 7 // BCM 4
+#define playButtonPin  0 // GPIO 0, BCM 17
+#define prevButtonPin  1 // GPIO 1, BCM 18
+#define nextButtonPin  2 // GPIO 2, BCM 27
+#define infoButtonPin  5 // GPIO 5, BCM 24
+#define quitButtonPin  7 // GPIO 7, BCM  4
+#define muteButtonPin 10 // CE 1,   BCM  8
+#define ledPausePin   11 // CE 0,   BCM  7
+#define ledInfoPin    15 // TxD,    BCM 14
 
 #define BTN_DELAY 30
 
@@ -550,7 +556,11 @@ int main(int argc, char **argv)
 			       "Prev    \t1       \t18\n"
 			       "Next    \t2       \t27\n"
 			       "Info    \t5       \t25\n"
-			       "Quit    \t7       \t4\n");
+			       "Quit    \t7       \t4\n\n"
+			       "-----------------------\n"
+			       "Pins for LEDs:\n"
+			       "Play/Pause\t11\t7\n"
+			       "Info      \t15\t14\n\n");
 			       return 1;
 		}
 		else if (strcmp(argv[1], "-songs") == 0)
@@ -611,6 +621,8 @@ int main(int argc, char **argv)
 		pinMode(buttonPins[i], INPUT);
 		pullUpDnControl(buttonPins[i], PUD_UP);
 	}
+	pinMode(ledPausePin, OUTPUT);
+	pinMode(ledInfoPin, OUTPUT);
 	/*
 	int t_ret;
 	t_ret = piThreadCreate(songThread);
@@ -720,6 +732,7 @@ int main(int argc, char **argv)
 						{
 							playMe();
 							pthread_mutex_lock(&cur_song.pauseMutex);
+							digitalWrite(ledPausePin, LOW);
 							strcpy(cur_song.second_row_text, pause_text);
 							lcdPosition(lcdHandle, 0, 1);
 							lcdPuts(lcdHandle, lcd_clear);
@@ -731,6 +744,7 @@ int main(int argc, char **argv)
 							pauseMe();
 							// copy whatever is currently on the second row
 							pthread_mutex_lock(&cur_song.pauseMutex);
+							digitalWrite(ledPausePin, HIGH);
 							strcpy(pause_text, cur_song.second_row_text);
 							strcpy(cur_song.second_row_text, "PAUSED");
 							lcdPosition(lcdHandle, 0, 1);
@@ -799,6 +813,7 @@ int main(int argc, char **argv)
 						{
 							// toggle what to display
 							pthread_mutex_lock(&cur_song.pauseMutex);
+							digitalWrite(ledInfoPin, !digitalRead(ledInfoPin));
 							strcpy(cur_song.second_row_text, (strcmp(cur_song.second_row_text, cur_song.artist) == 0 ? cur_song.album : cur_song.artist));
 							// first clear just the second row, then re-display the second row
 							lcdPosition(lcdHandle, 0, 1);
