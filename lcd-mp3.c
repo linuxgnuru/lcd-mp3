@@ -22,7 +22,15 @@
  *		mpg123
  *
  *
- *	25-01-2915	Added some LEDs to also indicate when paused and if info is on or not
+ *	31-01-2015	Setting up for final project; might need to fork this into a LCD only.
+ *			Things to be done:
+ *				- Change -dir and -songs to -d and -s and --dir= and --songs=
+ *				- FIXME song file names that have a space kill this... find out why
+ *				- On startup, (assuming the /etc/fstab has already mounted a USB drive (/dev/sda1)
+ *				  to /MUSIC) check /MUSIC and load in all music.
+ *				- if Quit button is pressed, display "QUIT - Shutdown" and "PAUSE - Cancel"
+ *	27-01-2015	Removed the LEDs from below...
+ *	25-01-2015	Added some LEDs to also indicate when paused and if info is on or not
  *	07-12-2014	Added the PAUSED text to the LCD when paused and disabled all other buttons while paused.
  *			FIXME need to allow user to quit program while paused. Removed unused/debug code
  *	06-12-2014	see if we can do something about the song being paused while next/prev/quit/info
@@ -78,9 +86,6 @@
 #define nextButtonPin  2 // GPIO 2, BCM 27
 #define infoButtonPin  5 // GPIO 5, BCM 24
 #define quitButtonPin  7 // GPIO 7, BCM  4
-#define muteButtonPin 10 // CE 1,   BCM  8
-#define ledPausePin   11 // CE 0,   BCM  7
-#define ledInfoPin    15 // TxD,    BCM 14
 
 #define BTN_DELAY 30
 
@@ -398,7 +403,7 @@ int usage(const char *progName)
 {
 	//"-usb [mount] "
 	fprintf(stderr, "Usage: %s [OPTION] \n"
-		"--pins (shows what pins to use for buttons) \n"
+		"-pins (shows what pins to use for buttons) \n"
 		"-dir [dir] \n"
 		"-songs [MP3 files]\n", progName);
 	return EXIT_FAILURE;
@@ -548,7 +553,7 @@ int main(int argc, char **argv)
 	scroll_firstRow_flag = scroll_secondRow_flag = FALSE;
 	if (argc > 1)
 	{
-		if (strcmp(argv[1], "--pins") == 0)
+		if (strcmp(argv[1], "-pins") == 0)
 		{
 			printf("Pins for buttons:\nFunction\twiringPi\tBCM\n"
 			       "--------\t--------\t---\n"
@@ -557,10 +562,6 @@ int main(int argc, char **argv)
 			       "Next    \t2       \t27\n"
 			       "Info    \t5       \t25\n"
 			       "Quit    \t7       \t4\n\n"
-			       "-----------------------\n"
-			       "Pins for LEDs:\n"
-			       "Play/Pause\t11\t7\n"
-			       "Info      \t15\t14\n\n");
 			       return 1;
 		}
 		else if (strcmp(argv[1], "-songs") == 0)
@@ -621,8 +622,6 @@ int main(int argc, char **argv)
 		pinMode(buttonPins[i], INPUT);
 		pullUpDnControl(buttonPins[i], PUD_UP);
 	}
-	pinMode(ledPausePin, OUTPUT);
-	pinMode(ledInfoPin, OUTPUT);
 	/*
 	int t_ret;
 	t_ret = piThreadCreate(songThread);
@@ -732,7 +731,6 @@ int main(int argc, char **argv)
 						{
 							playMe();
 							pthread_mutex_lock(&cur_song.pauseMutex);
-							digitalWrite(ledPausePin, LOW);
 							strcpy(cur_song.second_row_text, pause_text);
 							lcdPosition(lcdHandle, 0, 1);
 							lcdPuts(lcdHandle, lcd_clear);
@@ -744,7 +742,6 @@ int main(int argc, char **argv)
 							pauseMe();
 							// copy whatever is currently on the second row
 							pthread_mutex_lock(&cur_song.pauseMutex);
-							digitalWrite(ledPausePin, HIGH);
 							strcpy(pause_text, cur_song.second_row_text);
 							strcpy(cur_song.second_row_text, "PAUSED");
 							lcdPosition(lcdHandle, 0, 1);
@@ -813,7 +810,6 @@ int main(int argc, char **argv)
 						{
 							// toggle what to display
 							pthread_mutex_lock(&cur_song.pauseMutex);
-							digitalWrite(ledInfoPin, !digitalRead(ledInfoPin));
 							strcpy(cur_song.second_row_text, (strcmp(cur_song.second_row_text, cur_song.artist) == 0 ? cur_song.album : cur_song.artist));
 							// first clear just the second row, then re-display the second row
 							lcdPosition(lcdHandle, 0, 1);
