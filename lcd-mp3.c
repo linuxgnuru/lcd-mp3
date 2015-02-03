@@ -180,6 +180,22 @@ int mountToggle(int cmd, char *dir_name)
 	else
 		return MOUNTED;
 }
+
+// Check to see if the USB flash was mounted or not.
+// mount (if cmd == 1, do not attempt to unmount)
+int checkMount()
+{
+	if (mount("/dev/sda1", "/MUSIC", "vfat", MS_RDONLY | MS_SILENT, "") == -1)
+	{
+		if (errno == EBUSY)
+			return MOUNTED;
+		else
+			return MOUNT_ERROR;
+	}
+	else
+		return MOUNTED;
+}
+
 #define DEB 1
 
 // if USB has been mounted, load in songs.
@@ -489,7 +505,7 @@ void scrollMessage_secondRow(void)
 }
 
 // The actual thing that plays the song
-void *play_song(void *arguments)
+void play_song(void *arguments)
 {
 	struct song_info *args = (struct song_info *)arguments;
 	mpg123_handle *mh;
@@ -572,6 +588,7 @@ int main(int argc, char **argv)
 	int buttonState;
 	int btnCtr;
 	int noHalt = FALSE;
+	int mountFlag;
 
 	// Initializations
 	playlist_init(&cur_playlist);
@@ -601,6 +618,9 @@ int main(int argc, char **argv)
 				playlist_add_song(index - 1, string, &cur_playlist);
 				num_songs = argc - 2;
 			}
+			// FIXME I'm lazy right now; just threw this in so the test at the end
+			// won't fail.
+			mountFlag = MOUNTED;
 		}
 		/***************************************************
 		 *  This is the USB auto-startup mode              *
@@ -611,8 +631,11 @@ int main(int argc, char **argv)
 		 ***************************************************/
 		else if (strcmp(argv[1], "-usb") == 0)
 		{
-			cur_playlist = reReadPlaylist("/MUSIC");
-			//printf("num_songs: %d\n", num_songs);
+			// First, check if USB is mounted.
+			mountFlag = checkMount();
+			if (mountFlag == MOUNTED)
+			{
+				cur_playlist = reReadPlaylist("/MUSIC");
 			/*
 			if (num_songs == 0)
 			{
@@ -620,9 +643,10 @@ int main(int argc, char **argv)
 				return -1;
 			}
 			*/
-			if (strcmp(argv[2], "-nohalt") == 0)
-			{
-				noHalt = TRUE;
+				if (strcmp(argv[2], "-nohalt") == 0)
+				{
+					noHalt = TRUE;
+				}
 			}
 		}
 		else if (strcmp(argv[1], "-dir") == 0)
@@ -633,6 +657,9 @@ int main(int argc, char **argv)
 				printf("No songs found in directory %s\n", argv[2]);
 				return -1;
 			}
+			// FIXME I'm lazy right now; just threw this in so the test at the end
+			// won't fail.
+			mountFlag = MOUNTED;
 		}
 		else
 			return usage(argv[0]);
@@ -907,7 +934,7 @@ int main(int argc, char **argv)
 			cur_song.song_over = FALSE;
 			pthread_mutex_unlock(&cur_song.pauseMutex);
 			song_index++;
-		} // FIXME change mountFlag to cur_song.play_status == NEW
+		}
 		else if (cur_song.song_over == TRUE && (cur_song.play_status == NEXT || cur_song.play_status == PREV))
 		{
 			pthread_mutex_lock(&cur_song.pauseMutex);
@@ -920,12 +947,24 @@ int main(int argc, char **argv)
 			pthread_mutex_unlock(&cur_song.pauseMutex);
 		}
 	}
+	if (mountFlag == MOUNT_ERROR)
+	{
+		lcdClear(lcdHandle);
+		lcdPosition(lcdHandle, 0, 0);
+		//                  1234567890123456
+		lcdPuts(lcdHandle, "No USB inserted.");
+		lcdPosition(lcdHandle, 0, 1);
+		lcdPuts(lcdHandle, "Shutting down.");
+		delay(1000);
+		if (noHalt == FALSE)
+			system("shutdown -h now");
+	}
 	if (num_songs == 0)
 	{
 		lcdClear(lcdHandle);
 		lcdPosition(lcdHandle, 0, 0);
 		//                  1234567890123456
-		lcdPuts(lcdHandle, "No songs on USB");
+		lcdPuts(lcdHandle, "No songs on USB.");
 		lcdPosition(lcdHandle, 0, 1);
 		lcdPuts(lcdHandle, "Shutting down.");
 		delay(1000);

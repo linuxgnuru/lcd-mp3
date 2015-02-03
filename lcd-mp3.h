@@ -27,7 +27,6 @@ typedef enum {
 	MOUNT_ERROR
 } mount_enum;
 
-
 typedef enum {
 	TITLE,
 	ARTIST,
