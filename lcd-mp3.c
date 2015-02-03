@@ -180,17 +180,17 @@ int mountToggle(int cmd, char *dir_name)
 	else
 		return MOUNTED;
 }
+#define DEB 1
 
 // if USB has been mounted, load in songs.
 playlist_t reReadPlaylist(char *dir_name)
 {
-	int index;
+	int index = 0;
 	char *string;
 	playlist_t new_playlist;
 	DIR *d;
 	struct dirent *dir;
 
-	index = 1;
 	playlist_init(&new_playlist);
 	d = opendir(dir_name);
 	if (d)
@@ -199,13 +199,20 @@ playlist_t reReadPlaylist(char *dir_name)
 		{
 			if (dir->d_type == 8)
 			{
+				index = (index == 0 ? 1 : index);
 				string = malloc(MAXDATALEN);
 				if (string == NULL)
 					perror("malloc");
 				strcpy(string, dir_name);
+#ifdef DEB
+	printf("dir_name: %s\n", string);
+#endif
 				strcat(string, "/");
 				strcat(string, dir->d_name);
 				playlist_add_song(index++, string, &new_playlist);
+#ifdef DEB
+	printf("string: %s\n", string);
+#endif
 			}
 		}
 	}
@@ -417,7 +424,10 @@ int usage(const char *progName)
 		"-pins (shows what pins to use for buttons) \n"
 		"-dir [dir] \n"
 		"-songs [MP3 files]\n"
-		"-usb (this reads in any music found in /MUSIC)\n", progName);
+		"-usb (this reads in any music found in /MUSIC)\n"
+		"-nohalt (this is only if -usb is also used;\n"
+		"         prevents program from halting system after\n"
+		"         the 'quit' button was pressed.)\n", progName);
 	return EXIT_FAILURE;
 }
 
@@ -519,7 +529,7 @@ void *play_song(void *arguments)
 	while (mpg123_read(mh, buffer, buffer_size, &done) == MPG123_OK)
 	{
 		checkPause();
-		ao_play(dev, buffer, done);
+		ao_play(dev, (char *) buffer, done);
 		// stop playing if the user pressed quit, next, or prev buttons
 		if (cur_song.play_status == QUIT || cur_song.play_status == NEXT || cur_song.play_status == PREV)
 			break;
@@ -561,7 +571,7 @@ int main(int argc, char **argv)
 	int scroll_firstRow_flag, scroll_secondRow_flag;
 	int buttonState;
 	int btnCtr;
-	int noSongs = TRUE;
+	int noHalt = FALSE;
 
 	// Initializations
 	playlist_init(&cur_playlist);
@@ -602,10 +612,17 @@ int main(int argc, char **argv)
 		else if (strcmp(argv[1], "-usb") == 0)
 		{
 			cur_playlist = reReadPlaylist("/MUSIC");
+			//printf("num_songs: %d\n", num_songs);
+			/*
 			if (num_songs == 0)
 			{
-				printf("No songs found in mount %s\n", argv[2]);
+				printf("No songs found in mount /MUSIC\n");
 				return -1;
+			}
+			*/
+			if (strcmp(argv[2], "-nohalt") == 0)
+			{
+				noHalt = TRUE;
 			}
 		}
 		else if (strcmp(argv[1], "-dir") == 0)
@@ -652,7 +669,7 @@ int main(int argc, char **argv)
 		string = malloc(MAXDATALEN);
 		if (string == NULL)
 			perror("malloc");
-		playlist_get_song(song_index, &string, &cur_playlist);
+		playlist_get_song(song_index, (void **) &string, &cur_playlist);
 		if (string != NULL)
 		{
 			basec = strdup(string);
@@ -907,11 +924,13 @@ int main(int argc, char **argv)
 	{
 		lcdClear(lcdHandle);
 		lcdPosition(lcdHandle, 0, 0);
-		lcdPuts(lcdHandle, "No songs found");
+		//                  1234567890123456
+		lcdPuts(lcdHandle, "No songs on USB");
 		lcdPosition(lcdHandle, 0, 1);
-		lcdPuts(lcdHandle, "Shutting down");
+		lcdPuts(lcdHandle, "Shutting down.");
 		delay(1000);
-		system("shutdown -h now");
+		if (noHalt == FALSE)
+			system("shutdown -h now");
 	}
 	else
 	{
@@ -923,7 +942,8 @@ int main(int argc, char **argv)
 		{
 			lcdPosition(lcdHandle, 0, 0);
 			lcdPuts(lcdHandle, "Good Bye!");
-			system("shutdown -h now");
+			if (noHalt == FALSE)
+				system("shutdown -h now");
 		}
 		else
 		{
