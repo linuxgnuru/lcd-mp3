@@ -12,8 +12,6 @@
 // for id3
 #include <sys/types.h>
 
-#include <ncurses.h>
-
 // # defines:
 #ifndef	TRUE
 #  define	TRUE	(1==1)
@@ -63,6 +61,7 @@ struct song_info {
 	char artist[MAXDATALEN];
 	char genre[MAXDATALEN];
 	char album[MAXDATALEN];
+	char first_row_text[MAXDATALEN];
 	char second_row_text[MAXDATALEN];
 	char base_filename[MAXDATALEN];
 	char filename[MAXDATALEN];

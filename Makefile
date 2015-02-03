@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-c -Wall -g -O3
-LDFLAGS=-lao -lmpg123 -lpthread -lm -lncurses -lwiringPi -lwiringPiDev 
+LDFLAGS=-lao -lmpg123 -lpthread -lm -lwiringPi -lwiringPiDev 
 BIN=lcd-mp3
 SRC=$(BIN).c
 OBJ=$(SRC:.c=.o)
