@@ -643,6 +643,9 @@ int main(int argc, char **argv)
 				return -1;
 			}
 			*/
+			}
+			if (argc == 3)
+			{
 				if (strcmp(argv[2], "-nohalt") == 0)
 				{
 					noHalt = TRUE;
@@ -959,37 +962,41 @@ int main(int argc, char **argv)
 		if (noHalt == FALSE)
 			system("shutdown -h now");
 	}
-	if (num_songs == 0)
-	{
-		lcdClear(lcdHandle);
-		lcdPosition(lcdHandle, 0, 0);
-		//                  1234567890123456
-		lcdPuts(lcdHandle, "No songs on USB.");
-		lcdPosition(lcdHandle, 0, 1);
-		lcdPuts(lcdHandle, "Shutting down.");
-		delay(1000);
-		if (noHalt == FALSE)
-			system("shutdown -h now");
-	}
 	else
 	{
-		lcdClear(lcdHandle);
-		delay(1000);
-		lcdClear(lcdHandle);
-		// Don't shutdown unless the quit button was pressed.
-		if (cur_song.play_status == QUIT)
+		if (num_songs == 0)
 		{
+			lcdClear(lcdHandle);
 			lcdPosition(lcdHandle, 0, 0);
-			lcdPuts(lcdHandle, "Good Bye!");
+			//                  1234567890123456
+			lcdPuts(lcdHandle, "No songs on USB.");
+			lcdPosition(lcdHandle, 0, 1);
+			lcdPuts(lcdHandle, "Shutting down.");
+			delay(1000);
 			if (noHalt == FALSE)
 				system("shutdown -h now");
 		}
 		else
 		{
-			lcdPosition(lcdHandle, 0, 0);
-			lcdPuts(lcdHandle, "No more songs.");
-			lcdPosition(lcdHandle, 0, 1);
-			lcdPuts(lcdHandle, "Please shutdown.");
+			lcdClear(lcdHandle);
+			delay(1000);
+			lcdClear(lcdHandle);
+			// Don't shutdown unless the quit button was pressed.
+			if (cur_song.play_status == QUIT)
+			{
+				lcdPosition(lcdHandle, 0, 0);
+				lcdPuts(lcdHandle, "Good Bye!");
+				if (noHalt == FALSE)
+					system("shutdown -h now");
+			}
+			else
+			{
+				// TODO Maybe instead of getting here, we might just repeat the song list somehow?
+				lcdPosition(lcdHandle, 0, 0);
+				lcdPuts(lcdHandle, "No more songs.");
+				lcdPosition(lcdHandle, 0, 1);
+				lcdPuts(lcdHandle, "Please shutdown.");
+			}
 		}
 	}
 	return 0;
