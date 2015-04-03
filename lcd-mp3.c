@@ -1,5 +1,3 @@
-// TODO
-
 /*
  *	lcd-mp3
  *
@@ -14,13 +12,25 @@
  *	- many thanks to those who helped me out at StackExchange
  *	  (http://raspberrypi.stackexchange.com/)
  *
- *      requires:
+ *	Requires:
+ *	- Program must be run as root.
+ *	- Libraries:
  *		pthread
  *		wiringPi
  *		ao
  *		mpg123
+ *	- System setup:
+ *		- A directory /MUSIC needs to be created.
+ *		- In the file, /etc/fstab the following entry needs to be added:
+ *
+ *		/dev/sda1       /MUSIC          vfat    defaults          0       2
  *
  *
+ *	CHANGELOG
+ *	---------
+ *	03-04-2015	Changed shutdown/halt option (now you have to add -halt) Also tried to fix scrolling text
+ *			delay.  Song file names with spaces seem to work; wonder what else is wrong.
+ *			- FIXME - found odd bug; sometimes when paused, and is then unpaused the text gets glitchy.
  *	31-01-2015	Setting up for final project.
  *			Things to be done:
  *				- Remove all ncurses / terminal output
@@ -89,6 +99,10 @@
 
 #define BTN_DELAY 30
 
+// Nice way to include debuging prints without having to keep commenting out lines
+// just have to comment out the following line:
+//#define DEBUG 1
+
 // --------- END USER MODIFIABLE VARS ---------
 
 const int buttonPins[] = {
@@ -99,66 +113,84 @@ const int buttonPins[] = {
 	quitButtonPin
 	};
 
-// linked list / playlist functions
+int usage(const char *progName)
+{
+	fprintf(stderr, "Usage: %s [OPTION] \n"
+		"-pins (shows what pins to use for buttons) \n"
+		"-dir [dir] \n"
+		"-songs [MP3 files]\n"
+		"-usb (this reads in any music found in /MUSIC)\n"
+		"-halt (this is only if -usb is also used;\n"
+		"       allows the program to halt the system after\n"
+		"       the 'quit' button was pressed.)\n",
+		progName);
+	return EXIT_FAILURE;
+}
+
+/*
+ * linked list / playlist functions
+ */
 
 int playlist_init(playlist_t *playlistptr)
 {
-  *playlistptr = NULL;
-  return 1;
+	*playlistptr = NULL;
+	return 1;
 }
 
 int playlist_add_song(int index, void *songptr, playlist_t *playlistptr)
 {
-  playlist_node_t *cur, *prev, *new;
-  int found = FALSE;
+	playlist_node_t *cur, *prev, *new;
+	int found = FALSE;
 
-  for (cur = prev = *playlistptr; cur != NULL; prev = cur, cur = cur->nextptr)
-  {
-    if (cur->index == index)
-    {
-      free(cur->songptr);
-      cur->songptr = songptr;
-      found = TRUE;
-      break;
-    }
-    else if (cur->index > index)
-      break;
-  }
-  if (!found)
-  {
-    new = (playlist_node_t *)malloc(sizeof(playlist_node_t));
-    new->index = index;
-    new->songptr = songptr;
-    new->nextptr = cur;
-    if (cur == *playlistptr)
-      *playlistptr = new;
-    else
-      prev->nextptr = new;
-  }
-  return 1;
+	for (cur = prev = *playlistptr; cur != NULL; prev = cur, cur = cur->nextptr)
+	{
+		if (cur->index == index)
+		{
+			free(cur->songptr);
+			cur->songptr = songptr;
+			found = TRUE;
+			break;
+		}
+		else if (cur->index > index)
+			break;
+	}
+	if (!found)
+	{
+		new = (playlist_node_t *)malloc(sizeof(playlist_node_t));
+		new->index = index;
+		new->songptr = songptr;
+		new->nextptr = cur;
+		if (cur == *playlistptr)
+			*playlistptr = new;
+		else
+			prev->nextptr = new;
+	}
+	return 1;
 }
 
 int playlist_get_song(int index, void **songptr, playlist_t *playlistptr)
 {
-  playlist_node_t *cur, *prev;
+	playlist_node_t *cur, *prev;
 
-  // Initialize to "not found"
-  *songptr = NULL;
-  // Look through index for our entry
-  for (cur = prev = *playlistptr; cur != NULL; prev = cur, cur = cur->nextptr)
-  {
-    if (cur->index == index)
-    {
-      *songptr = cur->songptr;
-      break;
-    }
-    else if (cur->index > index)
-      break;
-  }
-  return 1;
+	// Initialize to "not found"
+	*songptr = NULL;
+	// Look through index for our entry
+	for (cur = prev = *playlistptr; cur != NULL; prev = cur, cur = cur->nextptr)
+	{
+		if (cur->index == index)
+		{
+			*songptr = cur->songptr;
+			break;
+		}
+		else if (cur->index > index)
+			break;
+	}
+	return 1;
 }
 
-// Mounting function; might use it in the future
+/*
+ * Mounting function; might use it in the future
+ */
 
 // mount (if cmd == 1, do not attempt to unmount)
 int mountToggle(int cmd, char *dir_name)
@@ -196,7 +228,9 @@ int checkMount()
 		return MOUNTED;
 }
 
-#define DEB 1
+/*
+ * Creates playlist
+ */
 
 // if USB has been mounted, load in songs.
 playlist_t reReadPlaylist(char *dir_name)
@@ -220,13 +254,13 @@ playlist_t reReadPlaylist(char *dir_name)
 				if (string == NULL)
 					perror("malloc");
 				strcpy(string, dir_name);
-#ifdef DEB
+#ifdef DEBUG
 	printf("dir_name: %s\n", string);
 #endif
 				strcat(string, "/");
 				strcat(string, dir->d_name);
 				playlist_add_song(index++, string, &new_playlist);
-#ifdef DEB
+#ifdef DEBUG
 	printf("string: %s\n", string);
 #endif
 			}
@@ -239,7 +273,9 @@ playlist_t reReadPlaylist(char *dir_name)
 	return new_playlist;
 }
 
-// pthread stuff
+/*
+ * Threading functions
+ */
 void nextSong()
 {
 	pthread_mutex_lock(&cur_song.pauseMutex);
@@ -288,7 +324,9 @@ void checkPause()
 	pthread_mutex_unlock(&cur_song.pauseMutex);
 }
 
-// ID3 stuff
+/*
+ * MP3 ID3 tag - Attempt to get song/artist/album names from file
+ */
 
 // Split up a number of lines separated by \n, \r, both or just zero byte
 //   and print out each line with specified prefix.
@@ -371,10 +409,10 @@ int id3_tagger()
 	}
 	else
 	{
-		sprintf(cur_song.title, "UNKNOWN");
+		sprintf(cur_song.title,  "UNKNOWN");
 		sprintf(cur_song.artist, "UNKNOWN");
-		sprintf(cur_song.album, "UNKNOWN");
-		sprintf(cur_song.genre, "UNKNOWN");
+		sprintf(cur_song.album,  "UNKNOWN");
+		sprintf(cur_song.genre,  "UNKNOWN");
 	}
 	// if there is no title to be found, set title to the song file name.
 	if (strlen(cur_song.title) == 0)
@@ -384,37 +422,40 @@ int id3_tagger()
 	if (strlen(cur_song.album) == 0)
 		sprintf(cur_song.album, "UNKNOWN");
 	// set the second row to be the artist by default.
-	strcpy(cur_song.first_row_text, cur_song.title);
-	strcpy(cur_song.second_row_text, cur_song.artist);
+	strcpy(cur_song.FirstRow_text, cur_song.title);
+	strcpy(cur_song.SecondRow_text, cur_song.artist);
 	mpg123_close(m);
 	mpg123_delete(m);
 	mpg123_exit();
 	// the following two lines are just to see when the scrolling should pause
-	strncpy(cur_song.scroll_firstRow, cur_song.first_row_text, 15);
-	strncpy(cur_song.scroll_secondRow, cur_song.second_row_text, 16);
+	strncpy(cur_song.scroll_FirstRow, cur_song.FirstRow_text, 15);
+	strncpy(cur_song.scroll_SecondRow, cur_song.SecondRow_text, 16);
 	return 0;
 }
 
+/*
+ * LCD display functions
+ */
 int printLcdFirstRow()
 {
 	int flag = TRUE;
 	
-	if (strcmp(cur_song.first_row_text, " QUIT - Shutdown") == 0)
+	if (strcmp(cur_song.FirstRow_text, " QUIT - Shutdown") == 0)
 	{
 		lcdPosition(lcdHandle, 0, 0);
-		lcdPuts(lcdHandle, cur_song.first_row_text);
+		lcdPuts(lcdHandle, cur_song.FirstRow_text);
 		flag = FALSE;
 	}
 	else
 	{
 		// have to set to 15 because of music note
-		if (strlen(cur_song.first_row_text) < 15)
+		if (strlen(cur_song.FirstRow_text) < 15)
 		{
 			lcdCharDef(lcdHandle, 2, musicNote);
 			lcdPosition(lcdHandle, 0, 0);
 			lcdPutchar(lcdHandle, 2);
 			lcdPosition(lcdHandle, 1, 0);
-			lcdPuts(lcdHandle, cur_song.first_row_text);
+			lcdPuts(lcdHandle, cur_song.FirstRow_text);
 			flag = FALSE;
 		}
 	}
@@ -424,36 +465,22 @@ int printLcdFirstRow()
 int printLcdSecondRow()
 {
 	int flag = TRUE;
-	if (strlen(cur_song.second_row_text) < 16)
+	if (strlen(cur_song.SecondRow_text) < 16)
 	{
 		lcdPosition(lcdHandle, 0, 1);
-		lcdPuts(lcdHandle, cur_song.second_row_text);
+		lcdPuts(lcdHandle, cur_song.SecondRow_text);
 		flag = FALSE;
 	}
 	return flag;
 }
 
-int usage(const char *progName)
-{
-	//"-usb [mount] "
-	fprintf(stderr, "Usage: %s [OPTION] \n"
-		"-pins (shows what pins to use for buttons) \n"
-		"-dir [dir] \n"
-		"-songs [MP3 files]\n"
-		"-usb (this reads in any music found in /MUSIC)\n"
-		"-nohalt (this is only if -usb is also used;\n"
-		"         prevents program from halting system after\n"
-		"         the 'quit' button was pressed.)\n", progName);
-	return EXIT_FAILURE;
-}
-
-void scrollMessage_firstRow(void)
+void scrollMessage_FirstRow(int *pauseScroll_FirstRow_Flag)
 {
 	char buf[32];
+	char my_songname[MAXDATALEN];
 	static int position = 0;
 	static int timer = 0;
 	int width = 15;
-	char my_songname[MAXDATALEN];
 
 	strcpy(my_songname, spaces);
 	strncat(my_songname, cur_song.title, strlen(cur_song.title));
@@ -470,14 +497,21 @@ void scrollMessage_firstRow(void)
 	lcdPosition(lcdHandle, 1, 0);
 	lcdPuts(lcdHandle, buf);
 	position++;
-	// pause briefly when text reaches begining line before continuing
-	if (strcmp(buf, cur_song.scroll_firstRow) == 0)
-		delay(1500);
 	if (position == (strlen(my_songname) - width))
 		position = 0;
+	/*		FIXME
+	 * 	FIXME		FIXME
+	 * FIXME	FIXME		FIXME
+	 * 	FIXME		FIXME
+	 *		FIXME
+	 */
+	// pause briefly when text reaches begining line before continuing
+	// Return TRUE if the text needs to be paused or not.
+	*pauseScroll_FirstRow_Flag = (strcmp(buf, cur_song.scroll_FirstRow) == 0 ? TRUE : FALSE);
+	//	delay(1500); // FIXME - Find a better way to pause scroll other than delay!!!!!!!!!!!!!
 }
 
-void scrollMessage_secondRow(void)
+void scrollMessage_SecondRow(int *pauseScroll_SecondRow_Flag)
 {
 	char buf[32];
 	static int position = 0;
@@ -486,7 +520,7 @@ void scrollMessage_secondRow(void)
 	char my_string[MAXDATALEN];
 
 	strcpy(my_string, spaces);
-	strncat(my_string, cur_song.second_row_text, strlen(cur_song.second_row_text));
+	strncat(my_string, cur_song.SecondRow_text, strlen(cur_song.SecondRow_text));
 	strcat(my_string, spaces);
 	my_string[strlen(my_string) + 1] = 0;
 	if (millis() < timer)
@@ -497,11 +531,11 @@ void scrollMessage_secondRow(void)
 	lcdPosition(lcdHandle, 0, 1);
 	lcdPuts(lcdHandle, buf);
 	position++;
-	// pause briefly when text reaches begining line before continuing
-	if (strcmp(buf, cur_song.scroll_secondRow) == 0)
-		delay(1500);
 	if (position == (strlen(my_string) - width))
 		position = 0;
+	// pause briefly when text reaches begining line before continuing
+	*pauseScroll_SecondRow_Flag = (strcmp(buf, cur_song.scroll_SecondRow) == 0 ? TRUE : FALSE);
+//		delay(1500);
 }
 
 // The actual thing that plays the song
@@ -570,30 +604,34 @@ int main(int argc, char **argv)
 {
 	pthread_t song_thread;
 	playlist_t cur_playlist;
+	clock_t startPauseFirstRow;  // for pausing scroll display
+	clock_t startPauseSecondRow; // for pausing scroll display
 	char *basec, *bname;
 	char *string;
 	char pause_text[MAXDATALEN];
-	//char quit_text1[MAXDATALEN];
-	//char quit_text2[MAXDATALEN];
 	char lcd_clear[] = "                ";
 	int index;
 	int song_index;
 	int i;
-	int useButtonFlag = TRUE;
-	/*
-	int FinishFlag = FALSE;
-	int repeat = TRUE;
-	*/
-	int scroll_firstRow_flag, scroll_secondRow_flag;
-	int buttonState;
 	int btnCtr;
-	int noHalt = FALSE;
+	int buttonState;
 	int mountFlag;
+	int haltFlag = FALSE;
+	int scroll_FirstRow_flag;
+	int scroll_SecondRow_flag;
+	int pauseScroll_FirstRow_Flag = FALSE;
+	int pauseScroll_SecondRow_Flag = FALSE;
+	int firstTime_FirstRow_Flag = TRUE;
+	int firstTime_SecondRow_Flag = TRUE;
+	int temp_FirstRow_Flag = FALSE;
+	int temp_SecondRow_Flag = FALSE;
 
 	// Initializations
 	playlist_init(&cur_playlist);
 	cur_song.song_over = FALSE;
-	scroll_firstRow_flag = scroll_secondRow_flag = FALSE;
+	scroll_FirstRow_flag = scroll_SecondRow_flag = FALSE;
+	startPauseFirstRow = clock();
+	startPauseSecondRow = clock();
 	if (argc > 1)
 	{
 		if (strcmp(argv[1], "-pins") == 0)
@@ -628,6 +666,11 @@ int main(int argc, char **argv)
 		 *  i.e. in /etc/rc.local add:                     *
 		 *                                                 *
 		 *  /usr/local/bin/lcd-mp3 -usb 2>/dev/null        *
+		 *                                                 *
+		 *  or, if you wish the system to be able to be    *
+		 *  shutdown after it quits:                       *
+		 *                                                 *
+		 *  /usr/local/bin/lcd-mp3 -usb -halt 2>/dev/null  *
 		 ***************************************************/
 		else if (strcmp(argv[1], "-usb") == 0)
 		{
@@ -636,19 +679,12 @@ int main(int argc, char **argv)
 			if (mountFlag == MOUNTED)
 			{
 				cur_playlist = reReadPlaylist("/MUSIC");
-			/*
-			if (num_songs == 0)
-			{
-				printf("No songs found in mount /MUSIC\n");
-				return -1;
-			}
-			*/
 			}
 			if (argc == 3)
 			{
-				if (strcmp(argv[2], "-nohalt") == 0)
+				if (strcmp(argv[2], "-halt") == 0)
 				{
-					noHalt = TRUE;
+					haltFlag = TRUE;
 				}
 			}
 		}
@@ -669,10 +705,10 @@ int main(int argc, char **argv)
 	}
 	else
 		return usage(argv[0]);
-  	if (wiringPiSetup () == -1)
-  	{
-	    fprintf(stdout, "oops: %s\n", strerror(errno));
-	    return 1;
+		if (wiringPiSetup () == -1)
+		{
+	fprintf(stdout, "oops: %s\n", strerror(errno));
+	return 1;
 	}
 	for (i = 0; i < 5; i++)
 	{
@@ -688,14 +724,8 @@ int main(int argc, char **argv)
 	}
 	song_index = 1;
 	cur_song.play_status = PLAY;
-	//while (cur_song.play_status != QUIT && FinishFlag != TRUE)
 	while (cur_song.play_status != QUIT && song_index < num_songs)
 	{
-		/*
-		if (repeat == FALSE)
-		if (song_index >= num_songs && repeat == FALSE)
-			FinishFlag = TRUE;
-		*/
 		string = malloc(MAXDATALEN);
 		if (string == NULL)
 			perror("malloc");
@@ -711,29 +741,120 @@ int main(int argc, char **argv)
 			// play the song as a thread
 			pthread_create(&song_thread, NULL, (void *) play_song, (void *) &cur_song);
 			// The following displays stuff to the LCD without scrolling
-			scroll_firstRow_flag = printLcdFirstRow();
-			scroll_secondRow_flag = printLcdSecondRow();
+			scroll_FirstRow_flag = printLcdFirstRow();
+			scroll_SecondRow_flag = printLcdSecondRow();
 			// loop to play the song
 			while (cur_song.song_over == FALSE)
 			{
 				// Following code is to scroll the song info
-				if (scroll_firstRow_flag == TRUE)
-					scrollMessage_firstRow();
-				if (scroll_secondRow_flag == TRUE)
-					scrollMessage_secondRow();
-				if (useButtonFlag == TRUE)
+				// TODO put in the "delay" here.
+				if (scroll_FirstRow_flag == TRUE)
+				{
+					if (firstTime_FirstRow_Flag == TRUE)
+					{
+						firstTime_FirstRow_Flag = FALSE;
+						scrollMessage_FirstRow(&pauseScroll_FirstRow_Flag);
+					}
+					else
+					{
+						if (pauseScroll_FirstRow_Flag == TRUE && temp_FirstRow_Flag == FALSE)
+						{
+							startPauseFirstRow = clock();
+							temp_FirstRow_Flag = TRUE;
+						}
+						if (temp_FirstRow_Flag == TRUE)
+						{
+							if ((int)((double)(clock() - startPauseFirstRow) / CLOCKS_PER_SEC) == 2)
+							{
+								pauseScroll_FirstRow_Flag = FALSE;
+								temp_FirstRow_Flag = FALSE;
+							}
+						}
+					}
+					if (pauseScroll_FirstRow_Flag == FALSE)
+						scrollMessage_FirstRow(&pauseScroll_FirstRow_Flag);
+				}
+				if (scroll_SecondRow_flag == TRUE)
+				{
+					if (firstTime_SecondRow_Flag == TRUE)
+					{
+						firstTime_SecondRow_Flag = FALSE;
+						scrollMessage_SecondRow(&pauseScroll_SecondRow_Flag);
+					}
+					else
+					{
+						if (pauseScroll_SecondRow_Flag == TRUE && temp_SecondRow_Flag == FALSE)
+						{
+							startPauseSecondRow = clock();
+							temp_SecondRow_Flag = TRUE;
+						}
+						if (temp_SecondRow_Flag == TRUE)
+						{
+							if ((int)((double)(clock() - startPauseSecondRow) / CLOCKS_PER_SEC) == 2)
+							{
+								pauseScroll_SecondRow_Flag = FALSE;
+								temp_SecondRow_Flag = FALSE;
+							}
+						}
+					}
+					if (pauseScroll_SecondRow_Flag == FALSE)
+						scrollMessage_SecondRow(&pauseScroll_SecondRow_Flag);
+				}
+				/*
+				 * Play / Pause button
+				 */
+				btnCtr = 0;
+				buttonState = digitalRead(playButtonPin);
+				if (buttonState == LOW)
+				{
+					// check 3 times to make sure the button was actually pressed
+					for (i = 0; i < 3; i++)
+					{
+						buttonState = digitalRead(playButtonPin);
+						if (buttonState == LOW)
+							btnCtr++;
+						delay(BTN_DELAY);
+					}
+				}
+				if (btnCtr >= 3)
+				{
+					if (cur_song.play_status == PAUSE)
+					{
+						playMe();
+						pthread_mutex_lock(&cur_song.pauseMutex);
+						strcpy(cur_song.SecondRow_text, pause_text);
+						lcdPosition(lcdHandle, 0, 1);
+						lcdPuts(lcdHandle, lcd_clear);
+						scroll_SecondRow_flag = printLcdSecondRow();
+						pthread_mutex_unlock(&cur_song.pauseMutex);
+					}
+					else
+					{
+						pauseMe();
+						// copy whatever is currently on the second row
+						pthread_mutex_lock(&cur_song.pauseMutex);
+						strcpy(pause_text, cur_song.SecondRow_text);
+						strcpy(cur_song.SecondRow_text, "PAUSED");
+						lcdPosition(lcdHandle, 0, 1);
+						lcdPuts(lcdHandle, lcd_clear);
+						scroll_SecondRow_flag = printLcdSecondRow();
+						pthread_mutex_unlock(&cur_song.pauseMutex);
+					}
+				}
+				// don't even check to see if the prev/next/info/quit buttons
+				// have been pressed if we are in a pause state.
+				if (cur_song.play_status != PAUSE)
 				{
 					/*
-					 * Play / Pause button
+					 * Previous button
 					 */
 					btnCtr = 0;
-					buttonState = digitalRead(playButtonPin);
+					buttonState = digitalRead(prevButtonPin);
 					if (buttonState == LOW)
 					{
-						// check 3 times to make sure the button was actually pressed
 						for (i = 0; i < 3; i++)
 						{
-							buttonState = digitalRead(playButtonPin);
+							buttonState = digitalRead(prevButtonPin);
 							if (buttonState == LOW)
 								btnCtr++;
 							delay(BTN_DELAY);
@@ -741,184 +862,79 @@ int main(int argc, char **argv)
 					}
 					if (btnCtr >= 3)
 					{
-						if (cur_song.play_status == PAUSE)
+						if (song_index - 1 != 0)
 						{
-							playMe();
-							pthread_mutex_lock(&cur_song.pauseMutex);
-							strcpy(cur_song.second_row_text, pause_text);
-							lcdPosition(lcdHandle, 0, 1);
-							lcdPuts(lcdHandle, lcd_clear);
-							scroll_secondRow_flag = printLcdSecondRow();
-							pthread_mutex_unlock(&cur_song.pauseMutex);
-						}
-						else
-						{
-							pauseMe();
-							// copy whatever is currently on the second row
-							pthread_mutex_lock(&cur_song.pauseMutex);
-							strcpy(pause_text, cur_song.second_row_text);
-							strcpy(cur_song.second_row_text, "PAUSED");
-							lcdPosition(lcdHandle, 0, 1);
-							lcdPuts(lcdHandle, lcd_clear);
-							scroll_secondRow_flag = printLcdSecondRow();
-							pthread_mutex_unlock(&cur_song.pauseMutex);
+							prevSong();
+							song_index--;
 						}
 					}
-					// don't even check to see if the prev/next/info/quit buttons
-					// have been pressed if we are in a pause state.
-					if (cur_song.play_status != PAUSE)
+					/*
+					 * Next button
+					 */
+					btnCtr = 0;
+					buttonState = digitalRead(nextButtonPin);
+					if (buttonState == LOW)
 					{
-						/*
-						 * Previous button
-						 */
-						btnCtr = 0;
-						buttonState = digitalRead(prevButtonPin);
-						if (buttonState == LOW)
+						for (i = 0; i < 3; i++)
 						{
-							for (i = 0; i < 3; i++)
-							{
-								buttonState = digitalRead(prevButtonPin);
-								if (buttonState == LOW)
-									btnCtr++;
-								delay(BTN_DELAY);
-							}
+							buttonState = digitalRead(nextButtonPin);
+							if (buttonState == LOW)
+								btnCtr++;
+							delay(BTN_DELAY);
 						}
-						if (btnCtr >= 3)
+					}
+					if (btnCtr >= 3)
+					{
+						if (song_index + 1 < num_songs)
 						{
-							if (song_index - 1 != 0)
-							{
-								prevSong();
-								song_index--;
-							}
+							nextSong();
+							song_index++;
 						}
-						/*
-						 * Next button
-						 */
-						btnCtr = 0;
-						buttonState = digitalRead(nextButtonPin);
-						if (buttonState == LOW)
+					}
+					/*
+					 * Info button
+					 */
+					btnCtr = 0;
+					buttonState = digitalRead(infoButtonPin);
+					if (buttonState == LOW)
+					{
+						for (i = 0; i < 3; i++)
 						{
-							for (i = 0; i < 3; i++)
-							{
-								buttonState = digitalRead(nextButtonPin);
-								if (buttonState == LOW)
-									btnCtr++;
-								delay(BTN_DELAY);
-							}
+							buttonState = digitalRead(infoButtonPin);
+							if (buttonState == LOW)
+								btnCtr++;
+							delay(BTN_DELAY);
 						}
-						if (btnCtr >= 3)
+					}
+					if (btnCtr >= 3)
+					{
+						// toggle what to display
+						pthread_mutex_lock(&cur_song.pauseMutex);
+						strcpy(cur_song.SecondRow_text, (strcmp(cur_song.SecondRow_text, cur_song.artist) == 0 ? cur_song.album : cur_song.artist));
+						// first clear just the second row, then re-display the second row
+						lcdPosition(lcdHandle, 0, 1);
+						lcdPuts(lcdHandle, lcd_clear);
+						scroll_SecondRow_flag = printLcdSecondRow();
+						pthread_mutex_unlock(&cur_song.pauseMutex);
+					}
+					/*
+					 * Quit button
+					 */
+					btnCtr = 0;
+					buttonState = digitalRead(quitButtonPin);
+					if (buttonState == LOW)
+					{
+						for (i = 0; i < 3; i++)
 						{
-							if (song_index + 1 < num_songs)
-							{
-								nextSong();
-								song_index++;
-							}
-						}
-						/*
-						 * Info button
-						 */
-						btnCtr = 0;
-						buttonState = digitalRead(infoButtonPin);
-						if (buttonState == LOW)
-						{
-							for (i = 0; i < 3; i++)
-							{
-								buttonState = digitalRead(infoButtonPin);
-								if (buttonState == LOW)
-									btnCtr++;
-								delay(BTN_DELAY);
-							}
-						}
-						if (btnCtr >= 3)
-						{
-							// toggle what to display
-							pthread_mutex_lock(&cur_song.pauseMutex);
-							strcpy(cur_song.second_row_text, (strcmp(cur_song.second_row_text, cur_song.artist) == 0 ? cur_song.album : cur_song.artist));
-							// first clear just the second row, then re-display the second row
-							lcdPosition(lcdHandle, 0, 1);
-							lcdPuts(lcdHandle, lcd_clear);
-							scroll_secondRow_flag = printLcdSecondRow();
-							pthread_mutex_unlock(&cur_song.pauseMutex);
-						}
-						/*
-						 * Quit button
-						 */
-						btnCtr = 0;
-						buttonState = digitalRead(quitButtonPin);
-						if (buttonState == LOW)
-						{
-							for (i = 0; i < 3; i++)
-							{
-								buttonState = digitalRead(quitButtonPin);
-								if (buttonState == LOW)
-									btnCtr++;
-								delay(BTN_DELAY);
-							}
-						}
-						if (btnCtr >= 3)
-						{
-							quitMe();
-							/*
-							// First press
-							pthread_mutex_lock(&cur_song.pauseMutex);
-							strcpy(quit_text1, cur_song.first_row_text);
-							strcpy(quit_text2, cur_song.second_row_text);
-							strcpy(cur_song.first_row_text, "Double hit quit");
-							strcpy(cur_song.second_row_text, "to shutdown");
-							lcdPosition(lcdHandle, 0, 0);
-							lcdPuts(lcdHandle, lcd_clear);
-							lcdPosition(lcdHandle, 0, 1);
-							lcdPuts(lcdHandle, lcd_clear);
-							scroll_firstRow_flag = printLcdFirstRow();
-							scroll_secondRow_flag = printLcdSecondRow();
-							pthread_mutex_unlock(&cur_song.pauseMutex);
-							// Second press
-							btnCtr = 0;
 							buttonState = digitalRead(quitButtonPin);
 							if (buttonState == LOW)
-							{
-								for (i = 0; i < 3; i++)
-								{
-									buttonState = digitalRead(quitButtonPin);
-									if (buttonState == LOW)
-										btnCtr++;
-									delay(BTN_DELAY);
-								}
-							}
-							if (btnCtr >= 3)
-							{
-								quitMe();
-							}
-							*/
-							/*
-							// Or cancel quit.
-							btnCtr = 0;
-							buttonState = digitalRead(playButtonPin);
-							if (buttonState == LOW)
-							{
-								for (i = 0; i < 3; i++)
-								{
-									buttonState = digitalRead(quitButtonPin);
-									if (buttonState == LOW)
-										btnCtr++;
-									delay(BTN_DELAY);
-								}
-							}
-							if (btnCtr >= 3)
-							{
-								pthread_mutex_lock(&cur_song.pauseMutex);
-								strcpy(cur_song.first_row_text, quit_text1);
-								strcpy(cur_song.second_row_text, quit_text2);
-								lcdPosition(lcdHandle, 0, 0);
-								lcdPuts(lcdHandle, lcd_clear);
-								lcdPosition(lcdHandle, 0, 1);
-								lcdPuts(lcdHandle, lcd_clear);
-								scroll_firstRow_flag = printLcdFirstRow();
-								scroll_secondRow_flag = printLcdSecondRow();
-								pthread_mutex_unlock(&cur_song.pauseMutex);
-							}
-							*/
+								btnCtr++;
+							delay(BTN_DELAY);
 						}
+					}
+					if (btnCtr >= 3)
+					{
+						quitMe();
 					}
 				}
 			}
@@ -929,7 +945,10 @@ int main(int argc, char **argv)
 		}
 		lcdClear(lcdHandle);
 		// reset all the flags.
-		scroll_firstRow_flag = scroll_secondRow_flag = FALSE;
+		scroll_FirstRow_flag = scroll_SecondRow_flag = FALSE;
+		pauseScroll_FirstRow_Flag = pauseScroll_SecondRow_Flag = FALSE;
+		firstTime_FirstRow_Flag = firstTime_SecondRow_Flag = TRUE;
+		temp_FirstRow_Flag = temp_SecondRow_Flag = FALSE;
 		// increment the song_index if the song is over but the next/prev wasn't hit
 		if (cur_song.song_over == TRUE && cur_song.play_status == PLAY)
 		{
@@ -954,12 +973,11 @@ int main(int argc, char **argv)
 	{
 		lcdClear(lcdHandle);
 		lcdPosition(lcdHandle, 0, 0);
-		//                  1234567890123456
 		lcdPuts(lcdHandle, "No USB inserted.");
 		lcdPosition(lcdHandle, 0, 1);
 		lcdPuts(lcdHandle, "Shutting down.");
 		delay(1000);
-		if (noHalt == FALSE)
+		if (haltFlag == TRUE)
 			system("shutdown -h now");
 	}
 	else
@@ -973,7 +991,7 @@ int main(int argc, char **argv)
 			lcdPosition(lcdHandle, 0, 1);
 			lcdPuts(lcdHandle, "Shutting down.");
 			delay(1000);
-			if (noHalt == FALSE)
+			if (haltFlag == TRUE)
 				system("shutdown -h now");
 		}
 		else
@@ -986,7 +1004,7 @@ int main(int argc, char **argv)
 			{
 				lcdPosition(lcdHandle, 0, 0);
 				lcdPuts(lcdHandle, "Good Bye!");
-				if (noHalt == FALSE)
+				if (haltFlag == TRUE)
 					system("shutdown -h now");
 			}
 			else

@@ -60,12 +60,12 @@ struct song_info {
 	char artist[MAXDATALEN];
 	char genre[MAXDATALEN];
 	char album[MAXDATALEN];
-	char first_row_text[MAXDATALEN];
-	char second_row_text[MAXDATALEN];
+	char FirstRow_text[MAXDATALEN];
+	char SecondRow_text[MAXDATALEN];
 	char base_filename[MAXDATALEN];
 	char filename[MAXDATALEN];
-	char scroll_firstRow[32];
-	char scroll_secondRow[32];
+	char scroll_FirstRow[32];
+	char scroll_SecondRow[32];
 	int song_number;
 	int song_over;
 	int play_status;
@@ -113,30 +113,3 @@ static int lcdHandle;
 // Global vars
 int num_songs; // current number of songs.
 
-/*
-// pthread
-void nextSong();
-void prevSong();
-void quitMe();
-void pauseMe();
-void playMe();
-void checkPause();
-
-// ID3 stuff
-void make_id(mpg123_string *inlines, int type);
-int id3_tagger();
-
-int usage(const char *progName);
-
-// LCD scrolling
-void scrollMessage_firstRow(void);
-void scrollMessage_secondRow(void);
-
-// threaded function that plays the music
-void *play_song(void *arguments);
-
-// Playlist
-int playlist_init(playlist_t *playlistptr);
-int playlist_add_song(int index, void *songptr, playlist_t *playlistptr);
-int playlist_get_song(int index, void **songptr, playlist_t *playlistptr);
-*/
