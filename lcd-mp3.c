@@ -3,14 +3,21 @@
  *
  *	John Wiggins (jcwiggi@gmail.com)
  *
- *	mp3 player with output to a 16x2 lcd display for song information
+ *	mp3 player for Raspberry Pi with output to a 16x2 LCD display for song information
  *
- *	Portions of this code were borrowed from MANY other projects including (but limited to)
- *	- wiringPi example code for lcd.c
+ *	Portions of this code were borrowed from MANY other projects including (but not limited to)
+ *
+ *	- wiringPi example code for lcd.c http://wiringpi.com/
+ *		- Many thanks to Gordon for making the wiringPi library.
+ *
  *	- http://hzqtc.github.io/2012/05/play-mp3-with-libmpg123-and-libao.html
+ *
  *	- http://www.arduino.cc/en/Tutorial/Debounce
- *	- many thanks to those who helped me out at StackExchange
+ *
+ *	- Many thanks to those who helped me out at StackExchange
  *	  (http://raspberrypi.stackexchange.com/)
+ *
+ * -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  *
  *	Requires:
  *	- Program must be run as root.
@@ -25,6 +32,7 @@
  *
  *		/dev/sda1       /MUSIC          vfat    defaults          0       2
  *
+ * -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  *
  *	CHANGELOG
  *	---------
@@ -753,6 +761,11 @@ int main(int argc, char **argv)
 				{
 					if (scroll_FirstRow_flag == TRUE)
 					{
+						/* 
+						 * NOTE; the following use of tons of flags and such are
+						 * used to avoid having to use the delay function which
+						 * was causing some problems.
+						 */
 						if (firstTime_FirstRow_Flag == TRUE)
 						{
 							firstTime_FirstRow_Flag = FALSE;
@@ -760,6 +773,7 @@ int main(int argc, char **argv)
 						}
 						else
 						{
+							// start the timer
 							if (pauseScroll_FirstRow_Flag == TRUE && temp_FirstRow_Flag == FALSE)
 							{
 								startPauseFirstRow = clock();
@@ -767,6 +781,7 @@ int main(int argc, char **argv)
 							}
 							if (temp_FirstRow_Flag == TRUE)
 							{
+								// check to see if 2 seconds has passed
 								if ((int)((double)(clock() - startPauseFirstRow) / CLOCKS_PER_SEC) == 2)
 								{
 									pauseScroll_FirstRow_Flag = FALSE;
@@ -817,6 +832,11 @@ int main(int argc, char **argv)
 				buttonState = digitalRead(playButtonPin);
 				if (buttonState == LOW)
 				{
+					/*
+					 * TODO Need a better way to debounce the buttons;
+					 * this works but not 100% of the time
+					 */
+					// -- Debouncing --
 					// check 3 times to make sure the button was actually pressed
 					for (i = 0; i < 3; i++)
 					{
