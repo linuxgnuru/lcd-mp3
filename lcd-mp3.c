@@ -749,63 +749,66 @@ int main(int argc, char **argv)
 			while (cur_song.song_over == FALSE)
 			{
 				// First row song-name
-				if (scroll_FirstRow_flag == TRUE)
+				if (cur_song.play_status != PAUSE)
 				{
-					if (firstTime_FirstRow_Flag == TRUE)
+					if (scroll_FirstRow_flag == TRUE)
 					{
-						firstTime_FirstRow_Flag = FALSE;
-						scrollMessage_FirstRow(&pauseScroll_FirstRow_Flag);
-					}
-					else
-					{
-						if (pauseScroll_FirstRow_Flag == TRUE && temp_FirstRow_Flag == FALSE)
+						if (firstTime_FirstRow_Flag == TRUE)
 						{
-							startPauseFirstRow = clock();
-							temp_FirstRow_Flag = TRUE;
+							firstTime_FirstRow_Flag = FALSE;
+							scrollMessage_FirstRow(&pauseScroll_FirstRow_Flag);
 						}
-						if (temp_FirstRow_Flag == TRUE)
+						else
 						{
-							if ((int)((double)(clock() - startPauseFirstRow) / CLOCKS_PER_SEC) == 2)
+							if (pauseScroll_FirstRow_Flag == TRUE && temp_FirstRow_Flag == FALSE)
 							{
-								pauseScroll_FirstRow_Flag = FALSE;
-								temp_FirstRow_Flag = FALSE;
+								startPauseFirstRow = clock();
+								temp_FirstRow_Flag = TRUE;
+							}
+							if (temp_FirstRow_Flag == TRUE)
+							{
+								if ((int)((double)(clock() - startPauseFirstRow) / CLOCKS_PER_SEC) == 2)
+								{
+									pauseScroll_FirstRow_Flag = FALSE;
+									temp_FirstRow_Flag = FALSE;
+								}
 							}
 						}
+						if (pauseScroll_FirstRow_Flag == FALSE)
+							scrollMessage_FirstRow(&pauseScroll_FirstRow_Flag);
 					}
-					if (pauseScroll_FirstRow_Flag == FALSE)
-						scrollMessage_FirstRow(&pauseScroll_FirstRow_Flag);
-				}
-				// Second row (artist / album)
-				if (scroll_SecondRow_flag == TRUE)
-				{
-					if (firstTime_SecondRow_Flag == TRUE)
+					// Second row (artist / album)
+					if (scroll_SecondRow_flag == TRUE)
 					{
-						firstTime_SecondRow_Flag = FALSE;
-						scrollMessage_SecondRow(&pauseScroll_SecondRow_Flag);
-						ctrSecondRowScroll = 1;
-					}
-					else
-					{
-						if (pauseScroll_SecondRow_Flag == TRUE && temp_SecondRow_Flag == FALSE)
+						if (firstTime_SecondRow_Flag == TRUE)
 						{
-							startPauseSecondRow = clock();
-							temp_SecondRow_Flag = TRUE;
+							firstTime_SecondRow_Flag = FALSE;
+							scrollMessage_SecondRow(&pauseScroll_SecondRow_Flag);
+							ctrSecondRowScroll = 1;
 						}
-						if (temp_SecondRow_Flag == TRUE)
+						else
 						{
-							if ((int)((double)(clock() - startPauseSecondRow) / CLOCKS_PER_SEC) == 2)
+							if (pauseScroll_SecondRow_Flag == TRUE && temp_SecondRow_Flag == FALSE)
 							{
-								pauseScroll_SecondRow_Flag = FALSE;
-								temp_SecondRow_Flag = FALSE;
-								ctrSecondRowScroll++;
+								startPauseSecondRow = clock();
+								temp_SecondRow_Flag = TRUE;
+							}
+							if (temp_SecondRow_Flag == TRUE)
+							{
+								if ((int)((double)(clock() - startPauseSecondRow) / CLOCKS_PER_SEC) == 2)
+								{
+									pauseScroll_SecondRow_Flag = FALSE;
+									temp_SecondRow_Flag = FALSE;
+									ctrSecondRowScroll++;
+								}
 							}
 						}
+						// Only scroll 2 times; after that just always display.
+						if (ctrSecondRowScroll > 2)
+							pauseScroll_SecondRow_Flag = TRUE;
+						if (pauseScroll_SecondRow_Flag == FALSE)
+							scrollMessage_SecondRow(&pauseScroll_SecondRow_Flag);
 					}
-					// Only scroll 2 times; after that just always display.
-					if (ctrSecondRowScroll == 2)
-						pauseScroll_SecondRow_Flag = TRUE;
-					if (pauseScroll_SecondRow_Flag == FALSE)
-						scrollMessage_SecondRow(&pauseScroll_SecondRow_Flag);
 				}
 				/*
 				 * Play / Pause button
