@@ -615,6 +615,7 @@ int main(int argc, char **argv)
 	int i;
 	int btnCtr;
 	int buttonState;
+	int ctrSecondRowScroll;
 	int mountFlag;
 	int haltFlag = FALSE;
 	int scroll_FirstRow_flag;
@@ -628,6 +629,7 @@ int main(int argc, char **argv)
 
 	// Initializations
 	playlist_init(&cur_playlist);
+	ctrSecondRowScroll = 0;
 	cur_song.song_over = FALSE;
 	scroll_FirstRow_flag = scroll_SecondRow_flag = FALSE;
 	startPauseFirstRow = clock();
@@ -746,8 +748,7 @@ int main(int argc, char **argv)
 			// loop to play the song
 			while (cur_song.song_over == FALSE)
 			{
-				// Following code is to scroll the song info
-				// TODO put in the "delay" here.
+				// First row song-name
 				if (scroll_FirstRow_flag == TRUE)
 				{
 					if (firstTime_FirstRow_Flag == TRUE)
@@ -774,12 +775,14 @@ int main(int argc, char **argv)
 					if (pauseScroll_FirstRow_Flag == FALSE)
 						scrollMessage_FirstRow(&pauseScroll_FirstRow_Flag);
 				}
+				// Second row (artist / album)
 				if (scroll_SecondRow_flag == TRUE)
 				{
 					if (firstTime_SecondRow_Flag == TRUE)
 					{
 						firstTime_SecondRow_Flag = FALSE;
 						scrollMessage_SecondRow(&pauseScroll_SecondRow_Flag);
+						ctrSecondRowScroll = 1;
 					}
 					else
 					{
@@ -794,9 +797,13 @@ int main(int argc, char **argv)
 							{
 								pauseScroll_SecondRow_Flag = FALSE;
 								temp_SecondRow_Flag = FALSE;
+								ctrSecondRowScroll++;
 							}
 						}
 					}
+					// Only scroll 2 times; after that just always display.
+					if (ctrSecondRowScroll == 2)
+						pauseScroll_SecondRow_Flag = TRUE;
 					if (pauseScroll_SecondRow_Flag == FALSE)
 						scrollMessage_SecondRow(&pauseScroll_SecondRow_Flag);
 				}
@@ -949,6 +956,7 @@ int main(int argc, char **argv)
 		pauseScroll_FirstRow_Flag = pauseScroll_SecondRow_Flag = FALSE;
 		firstTime_FirstRow_Flag = firstTime_SecondRow_Flag = TRUE;
 		temp_FirstRow_Flag = temp_SecondRow_Flag = FALSE;
+		ctrSecondRowScroll = 0;
 		// increment the song_index if the song is over but the next/prev wasn't hit
 		if (cur_song.song_over == TRUE && cur_song.play_status == PLAY)
 		{
