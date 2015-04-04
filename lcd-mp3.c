@@ -1078,6 +1078,7 @@ int main(int argc, char **argv)
 			{
 				lcdPosition(lcdHandle, 0, 0);
 				lcdPuts(lcdHandle, "Good Bye!");
+				lcdPosition(lcdHandle, 0, 1);
 				if (haltFlag == TRUE)
 				{
 					lcdPuts(lcdHandle, "Shuting down.");
