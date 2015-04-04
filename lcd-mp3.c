@@ -17,6 +17,16 @@
  *	- Many thanks to those who helped me out at StackExchange
  *	  (http://raspberrypi.stackexchange.com/)
  *
+ *  Known issues:
+ *
+ *	- The MP3 decoding part I use for some reason always gives me an error on STDERR and I haven't the
+ *	  time to go through the lib sources to try to find out what's going on; so I always just run the
+ *	  program with 2>/dev/null (e.g. lcd-mp3-usb 2>/dev/null)
+ *
+ * Unknown issues:
+ *
+ *	- see recusion
+ *
  * -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  *
  *	Requires:
@@ -114,14 +124,16 @@
 // just have to comment out the following line:
 //#define DEBUG 1
 
+// --------- END USER MODIFIABLE VARS ---------
+
+
 /*
- * Debounce
+ * Debounce tracking stuff
  */
 int  playButtonState,      prevButtonState,      nextButtonState,      infoButtonState,      quitButtonState;
 int  lastPlayButtonState,  lastPrevButtonState,  lastNextButtonState,  lastInfoButtonState,  lastQuitButtonState;
 long lastPlayDebounceTime, lastPrevDebounceTime, lastNextDebounceTime, lastInfoDebounceTime, lastQuitDebounceTime;
 long debounceDelay = 50;
-// --------- END USER MODIFIABLE VARS ---------
 
 const int buttonPins[] = {
 	playButtonPin,
@@ -272,15 +284,9 @@ playlist_t reReadPlaylist(char *dir_name)
 				if (string == NULL)
 					perror("malloc");
 				strcpy(string, dir_name);
-#ifdef DEBUG
-	printf("dir_name: %s\n", string);
-#endif
 				strcat(string, "/");
 				strcat(string, dir->d_name);
 				playlist_add_song(index++, string, &new_playlist);
-#ifdef DEBUG
-	printf("string: %s\n", string);
-#endif
 			}
 		}
 	}
@@ -703,13 +709,16 @@ int main(int argc, char **argv)
 		 *  i.e. in /etc/rc.local add:                     *
 		 *                                                 *
 		 *  /usr/local/bin/lcd-mp3 -usb 2>/dev/null        *
+		 *  or you can simply name the program lcd-mp3-usb *
+		 *  e.g.                                           *
+		 *  /usr/local/bin/lcd-mp3-usb 2>/dev/null         *
 		 *                                                 *
-		 *  or, if you wish the system to be able to be    *
+		 *  if you wish the system to be able to be        *
 		 *  shutdown after it quits:                       *
 		 *                                                 *
 		 *  /usr/local/bin/lcd-mp3 -usb -halt 2>/dev/null  *
 		 ***************************************************/
-		else if (strcmp(argv[1], "-usb") == 0)
+		else if (strcmp(argv[1], "-usb") == 0 || strcmp(argv[0], "lcd-mp3-usb") == 0)
 		{
 			// First, check if USB is mounted.
 			mountFlag = checkMount();
@@ -857,6 +866,18 @@ int main(int argc, char **argv)
 				/*
 				 * Play / Pause button
 				 */
+				 /*
+				  * NOTE:
+				  * I got the following debouncing code from
+				  * http://www.arduino.cc/en/Tutorial/Debounce 
+				  *
+				  * Excerpt from source:
+				  *
+ 				  *  created 21 Nov 2006 by David A. Mellis
+  				  * modified 30 Aug 2011 by Limor Fried
+  				  * modified 28 Dec 2012 by Mike Walters
+  				  * This example code is in the public domain.
+				  */
 				reading = digitalRead(playButtonPin);
 				// check to see if you just pressed the button 
 				// (i.e. the input went from HIGH to LOW),  and you've waited 
@@ -877,25 +898,21 @@ int main(int argc, char **argv)
 							if (cur_song.play_status == PAUSE)
 							{
 								playMe();
-								//pthread_mutex_lock(&cur_song.pauseMutex);
 								strcpy(cur_song.SecondRow_text, pause_text);
 								lcdPosition(lcdHandle, 0, 1);
 								lcdPuts(lcdHandle, lcd_clear);
 								scroll_SecondRow_flag = printLcdSecondRow();
-								//pthread_mutex_unlock(&cur_song.pauseMutex);
 							}
 							else
 							{
 								pauseMe();
 								// copy whatever is currently on the second row
-								//pthread_mutex_lock(&cur_song.pauseMutex);
 								strcpy(pause_text, cur_song.SecondRow_text);
 								strcpy(cur_song.SecondRow_text, "PAUSED");
 								strcpy(cur_song.prevArtist, cur_song.artist);
 								lcdPosition(lcdHandle, 0, 1);
 								lcdPuts(lcdHandle, lcd_clear);
 								scroll_SecondRow_flag = printLcdSecondRow();
-								//pthread_mutex_unlock(&cur_song.pauseMutex);
 							}
 						}
 					}
@@ -964,13 +981,11 @@ int main(int argc, char **argv)
 							if (infoButtonState == LOW)
 							{
 								// toggle what to display
-								//pthread_mutex_lock(&cur_song.pauseMutex);
 								strcpy(cur_song.SecondRow_text, (strcmp(cur_song.SecondRow_text, cur_song.artist) == 0 ? cur_song.album : cur_song.artist));
 								// first clear just the second row, then re-display the second row
 								lcdPosition(lcdHandle, 0, 1);
 								lcdPuts(lcdHandle, lcd_clear);
 								scroll_SecondRow_flag = printLcdSecondRow();
-								//pthread_mutex_unlock(&cur_song.pauseMutex);
 							}
 						}
 					}
@@ -1030,10 +1045,14 @@ int main(int argc, char **argv)
 		lcdPosition(lcdHandle, 0, 0);
 		lcdPuts(lcdHandle, "No USB inserted.");
 		lcdPosition(lcdHandle, 0, 1);
-		lcdPuts(lcdHandle, "Shutting down.");
-		delay(1000);
 		if (haltFlag == TRUE)
+		{
+			lcdPuts(lcdHandle, "Shutting down.");
+			delay(1000);
 			system("shutdown -h now");
+		}
+		else
+			lcdPuts(lcdHandle, "Please shutdown.");
 	}
 	else
 	{
@@ -1041,13 +1060,16 @@ int main(int argc, char **argv)
 		{
 			lcdClear(lcdHandle);
 			lcdPosition(lcdHandle, 0, 0);
-			//                  1234567890123456
 			lcdPuts(lcdHandle, "No songs on USB.");
 			lcdPosition(lcdHandle, 0, 1);
-			lcdPuts(lcdHandle, "Shutting down.");
-			delay(1000);
 			if (haltFlag == TRUE)
+			{
+				lcdPuts(lcdHandle, "Shutting down.");
+				delay(1000);
 				system("shutdown -h now");
+			}
+			else
+				lcdPuts(lcdHandle, "Please shutdown.");
 		}
 		else
 		{
@@ -1060,7 +1082,13 @@ int main(int argc, char **argv)
 				lcdPosition(lcdHandle, 0, 0);
 				lcdPuts(lcdHandle, "Good Bye!");
 				if (haltFlag == TRUE)
+				{
+					lcdPuts(lcdHandle, "Shuting down.");
+					delay(1000);
 					system("shutdown -h now");
+				}
+				else
+					lcdPuts(lcdHandle, "Please shutdown.");
 			}
 			else
 			{
@@ -1068,7 +1096,14 @@ int main(int argc, char **argv)
 				lcdPosition(lcdHandle, 0, 0);
 				lcdPuts(lcdHandle, "No more songs.");
 				lcdPosition(lcdHandle, 0, 1);
-				lcdPuts(lcdHandle, "Please shutdown.");
+				if (haltFlag == TRUE)
+				{
+					lcdPuts(lcdHandle, "Shuting down.");
+					delay(1000);
+					system("shutdown -h now");
+				}
+				else
+					lcdPuts(lcdHandle, "Please shutdown.");
 			}
 		}
 	}
