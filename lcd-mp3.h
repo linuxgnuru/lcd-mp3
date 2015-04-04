@@ -56,14 +56,16 @@ typedef struct playlist_node {
 typedef playlist_node_t *playlist_t;
 
 struct song_info {
+	char base_filename[MAXDATALEN];
+	char filename[MAXDATALEN];
 	char title[MAXDATALEN];
 	char artist[MAXDATALEN];
 	char genre[MAXDATALEN];
 	char album[MAXDATALEN];
+	char prevTitle[MAXDATALEN];
+	char prevArtist[MAXDATALEN];
 	char FirstRow_text[MAXDATALEN];
 	char SecondRow_text[MAXDATALEN];
-	char base_filename[MAXDATALEN];
-	char filename[MAXDATALEN];
 	char scroll_FirstRow[32];
 	char scroll_SecondRow[32];
 	int song_number;

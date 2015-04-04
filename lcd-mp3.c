@@ -36,6 +36,8 @@
  *
  *	CHANGELOG
  *	---------
+ *	04-04-2015	Try to fix LCD bug
+ *	03-04-2015	TODO find better way for debouncing buttons; maybe have to do in hardware.
  *	03-04-2015	Changed shutdown/halt option (now you have to add -halt) Also tried to fix scrolling text
  *			delay.  Song file names with spaces seem to work; wonder what else is wrong.
  *			- FIXME - found odd bug; sometimes when paused, and is then unpaused the text gets glitchy.
@@ -110,6 +112,7 @@
 // Nice way to include debuging prints without having to keep commenting out lines
 // just have to comment out the following line:
 //#define DEBUG 1
+//#define FU
 
 // --------- END USER MODIFIABLE VARS ---------
 
@@ -444,6 +447,8 @@ int id3_tagger()
 /*
  * LCD display functions
  */
+
+// non-scrolling
 int printLcdFirstRow()
 {
 	int flag = TRUE;
@@ -459,6 +464,9 @@ int printLcdFirstRow()
 		// have to set to 15 because of music note
 		if (strlen(cur_song.FirstRow_text) < 15)
 		{
+			// new song; set the previous title
+			if (strcmp(cur_song.title, cur_song.prevTitle) != 0)
+				strcpy(cur_song.prevTitle, cur_song.title);
 			lcdCharDef(lcdHandle, 2, musicNote);
 			lcdPosition(lcdHandle, 0, 0);
 			lcdPutchar(lcdHandle, 2);
@@ -470,14 +478,19 @@ int printLcdFirstRow()
 	return flag;
 }
 
+// non-scrolling
 int printLcdSecondRow()
 {
 	int flag = TRUE;
+
 	if (strlen(cur_song.SecondRow_text) < 16)
 	{
 		lcdPosition(lcdHandle, 0, 1);
 		lcdPuts(lcdHandle, cur_song.SecondRow_text);
 		flag = FALSE;
+		// new song; set the previous artist
+		if (strcmp(cur_song.artist, cur_song.prevArtist) != 0)
+			strcpy(cur_song.prevArtist, cur_song.artist);
 	}
 	return flag;
 }
@@ -490,6 +503,12 @@ void scrollMessage_FirstRow(int *pauseScroll_FirstRow_Flag)
 	static int timer = 0;
 	int width = 15;
 
+	if (strcmp(cur_song.title, cur_song.prevTitle) != 0)
+	{
+		timer = 0;
+		position = 0;
+		strcpy(cur_song.prevTitle, cur_song.title);
+	}
 	strcpy(my_songname, spaces);
 	strncat(my_songname, cur_song.title, strlen(cur_song.title));
 	strcat(my_songname, spaces);
@@ -507,16 +526,8 @@ void scrollMessage_FirstRow(int *pauseScroll_FirstRow_Flag)
 	position++;
 	if (position == (strlen(my_songname) - width))
 		position = 0;
-	/*		FIXME
-	 * 	FIXME		FIXME
-	 * FIXME	FIXME		FIXME
-	 * 	FIXME		FIXME
-	 *		FIXME
-	 */
 	// pause briefly when text reaches begining line before continuing
-	// Return TRUE if the text needs to be paused or not.
 	*pauseScroll_FirstRow_Flag = (strcmp(buf, cur_song.scroll_FirstRow) == 0 ? TRUE : FALSE);
-	//	delay(1500); // FIXME - Find a better way to pause scroll other than delay!!!!!!!!!!!!!
 }
 
 void scrollMessage_SecondRow(int *pauseScroll_SecondRow_Flag)
@@ -527,6 +538,12 @@ void scrollMessage_SecondRow(int *pauseScroll_SecondRow_Flag)
 	int width = 16;
 	char my_string[MAXDATALEN];
 
+	if (strcmp(cur_song.artist, cur_song.prevArtist) != 0)
+	{
+		timer = 0;
+		position = 0;
+		strcpy(cur_song.prevArtist, cur_song.artist);
+	}
 	strcpy(my_string, spaces);
 	strncat(my_string, cur_song.SecondRow_text, strlen(cur_song.SecondRow_text));
 	strcat(my_string, spaces);
@@ -543,7 +560,6 @@ void scrollMessage_SecondRow(int *pauseScroll_SecondRow_Flag)
 		position = 0;
 	// pause briefly when text reaches begining line before continuing
 	*pauseScroll_SecondRow_Flag = (strcmp(buf, cur_song.scroll_SecondRow) == 0 ? TRUE : FALSE);
-//		delay(1500);
 }
 
 // The actual thing that plays the song
@@ -603,7 +619,9 @@ void play_song(void *arguments)
 	args->song_over = TRUE;
 	// only set the status to play if the song finished normally
 	if (cur_song.play_status != QUIT && cur_song.play_status != NEXT && cur_song.play_status != PREV)
+	{
 		args->play_status = PLAY;
+	}
 	cur_status.song_over = TRUE;
 	pthread_mutex_unlock(&(cur_song.writeMutex));
 }
@@ -624,6 +642,7 @@ int main(int argc, char **argv)
 	int btnCtr;
 	int buttonState;
 	int ctrSecondRowScroll;
+	// Flags
 	int mountFlag;
 	int haltFlag = FALSE;
 	int scroll_FirstRow_flag;
@@ -715,10 +734,10 @@ int main(int argc, char **argv)
 	}
 	else
 		return usage(argv[0]);
-		if (wiringPiSetup () == -1)
-		{
-	fprintf(stdout, "oops: %s\n", strerror(errno));
-	return 1;
+	if (wiringPiSetup () == -1)
+	{
+		fprintf(stdout, "oops: %s\n", strerror(errno));
+		return 1;
 	}
 	for (i = 0; i < 5; i++)
 	{
@@ -734,6 +753,8 @@ int main(int argc, char **argv)
 	}
 	song_index = 1;
 	cur_song.play_status = PLAY;
+	strcpy(cur_song.prevTitle, cur_song.title);
+	strcpy(cur_song.prevArtist, cur_song.artist);
 	while (cur_song.play_status != QUIT && song_index < num_songs)
 	{
 		string = malloc(MAXDATALEN);
@@ -781,8 +802,8 @@ int main(int argc, char **argv)
 							}
 							if (temp_FirstRow_Flag == TRUE)
 							{
-								// check to see if 2 seconds has passed
-								if ((int)((double)(clock() - startPauseFirstRow) / CLOCKS_PER_SEC) == 2)
+								// check to see if 1 second has passed
+								if ((int)((double)(clock() - startPauseFirstRow) / CLOCKS_PER_SEC) == 1)
 								{
 									pauseScroll_FirstRow_Flag = FALSE;
 									temp_FirstRow_Flag = FALSE;
@@ -810,7 +831,7 @@ int main(int argc, char **argv)
 							}
 							if (temp_SecondRow_Flag == TRUE)
 							{
-								if ((int)((double)(clock() - startPauseSecondRow) / CLOCKS_PER_SEC) == 2)
+								if ((int)((double)(clock() - startPauseSecondRow) / CLOCKS_PER_SEC) == 1)
 								{
 									pauseScroll_SecondRow_Flag = FALSE;
 									temp_SecondRow_Flag = FALSE;
@@ -851,24 +872,25 @@ int main(int argc, char **argv)
 					if (cur_song.play_status == PAUSE)
 					{
 						playMe();
-						pthread_mutex_lock(&cur_song.pauseMutex);
+						//pthread_mutex_lock(&cur_song.pauseMutex);
 						strcpy(cur_song.SecondRow_text, pause_text);
 						lcdPosition(lcdHandle, 0, 1);
 						lcdPuts(lcdHandle, lcd_clear);
 						scroll_SecondRow_flag = printLcdSecondRow();
-						pthread_mutex_unlock(&cur_song.pauseMutex);
+						//pthread_mutex_unlock(&cur_song.pauseMutex);
 					}
 					else
 					{
 						pauseMe();
 						// copy whatever is currently on the second row
-						pthread_mutex_lock(&cur_song.pauseMutex);
+						//pthread_mutex_lock(&cur_song.pauseMutex);
 						strcpy(pause_text, cur_song.SecondRow_text);
 						strcpy(cur_song.SecondRow_text, "PAUSED");
+						strcpy(cur_song.prevArtist, cur_song.artist);
 						lcdPosition(lcdHandle, 0, 1);
 						lcdPuts(lcdHandle, lcd_clear);
 						scroll_SecondRow_flag = printLcdSecondRow();
-						pthread_mutex_unlock(&cur_song.pauseMutex);
+						//pthread_mutex_unlock(&cur_song.pauseMutex);
 					}
 				}
 				// don't even check to see if the prev/next/info/quit buttons
@@ -939,13 +961,13 @@ int main(int argc, char **argv)
 					if (btnCtr >= 3)
 					{
 						// toggle what to display
-						pthread_mutex_lock(&cur_song.pauseMutex);
+						//pthread_mutex_lock(&cur_song.pauseMutex);
 						strcpy(cur_song.SecondRow_text, (strcmp(cur_song.SecondRow_text, cur_song.artist) == 0 ? cur_song.album : cur_song.artist));
 						// first clear just the second row, then re-display the second row
 						lcdPosition(lcdHandle, 0, 1);
 						lcdPuts(lcdHandle, lcd_clear);
 						scroll_SecondRow_flag = printLcdSecondRow();
-						pthread_mutex_unlock(&cur_song.pauseMutex);
+						//pthread_mutex_unlock(&cur_song.pauseMutex);
 					}
 					/*
 					 * Quit button
@@ -968,18 +990,18 @@ int main(int argc, char **argv)
 					}
 				}
 			}
+			// reset all the flags.
+			scroll_FirstRow_flag = scroll_SecondRow_flag = FALSE;
+			pauseScroll_FirstRow_Flag = pauseScroll_SecondRow_Flag = FALSE;
+			firstTime_FirstRow_Flag = firstTime_SecondRow_Flag = TRUE;
+			temp_FirstRow_Flag = temp_SecondRow_Flag = FALSE;
+			ctrSecondRowScroll = 0;
 			if (pthread_join(song_thread, NULL) != 0)
 				perror("join error\n");
 			// clear the lcd for next song.
 			lcdClear(lcdHandle);
 		}
 		lcdClear(lcdHandle);
-		// reset all the flags.
-		scroll_FirstRow_flag = scroll_SecondRow_flag = FALSE;
-		pauseScroll_FirstRow_Flag = pauseScroll_SecondRow_Flag = FALSE;
-		firstTime_FirstRow_Flag = firstTime_SecondRow_Flag = TRUE;
-		temp_FirstRow_Flag = temp_SecondRow_Flag = FALSE;
-		ctrSecondRowScroll = 0;
 		// increment the song_index if the song is over but the next/prev wasn't hit
 		if (cur_song.song_over == TRUE && cur_song.play_status == PLAY)
 		{
