@@ -36,6 +36,7 @@
  *
  *	CHANGELOG
  *	---------
+ *	04-04-2015	Trying new debounce.
  *	04-04-2015	Try to fix LCD bug
  *	03-04-2015	TODO find better way for debouncing buttons; maybe have to do in hardware.
  *	03-04-2015	Changed shutdown/halt option (now you have to add -halt) Also tried to fix scrolling text
@@ -112,8 +113,14 @@
 // Nice way to include debuging prints without having to keep commenting out lines
 // just have to comment out the following line:
 //#define DEBUG 1
-//#define FU
 
+/*
+ * Debounce
+ */
+int  playButtonState,      prevButtonState,      nextButtonState,      infoButtonState,      quitButtonState;
+int  lastPlayButtonState,  lastPrevButtonState,  lastNextButtonState,  lastInfoButtonState,  lastQuitButtonState;
+long lastPlayDebounceTime, lastPrevDebounceTime, lastNextDebounceTime, lastInfoDebounceTime, lastQuitDebounceTime;
+long debounceDelay = 50;
 // --------- END USER MODIFIABLE VARS ---------
 
 const int buttonPins[] = {
@@ -639,9 +646,8 @@ int main(int argc, char **argv)
 	int index;
 	int song_index;
 	int i;
-	int btnCtr;
-	int buttonState;
 	int ctrSecondRowScroll;
+	int reading;
 	// Flags
 	int mountFlag;
 	int haltFlag = FALSE;
@@ -659,6 +665,8 @@ int main(int argc, char **argv)
 	ctrSecondRowScroll = 0;
 	cur_song.song_over = FALSE;
 	scroll_FirstRow_flag = scroll_SecondRow_flag = FALSE;
+	lastPlayButtonState = lastPrevButtonState = lastNextButtonState = lastInfoButtonState = lastQuitButtonState = HIGH;
+	lastPlayDebounceTime = lastPrevDebounceTime = lastNextDebounceTime = lastInfoDebounceTime = lastQuitDebounceTime = 0;
 	startPauseFirstRow = clock();
 	startPauseSecondRow = clock();
 	if (argc > 1)
@@ -849,50 +857,51 @@ int main(int argc, char **argv)
 				/*
 				 * Play / Pause button
 				 */
-				btnCtr = 0;
-				buttonState = digitalRead(playButtonPin);
-				if (buttonState == LOW)
+				reading = digitalRead(playButtonPin);
+				// check to see if you just pressed the button 
+				// (i.e. the input went from HIGH to LOW),  and you've waited 
+				// long enough since the last press to ignore any noise:  
+				// If the switch changed, due to noise or pressing:
+				if (reading != lastPlayButtonState)
+					lastPlayDebounceTime = millis(); // reset the debouncing timer
+				if ((millis() - lastPlayDebounceTime) > debounceDelay)
 				{
-					/*
-					 * TODO Need a better way to debounce the buttons;
-					 * this works but not 100% of the time
-					 */
-					// -- Debouncing --
-					// check 3 times to make sure the button was actually pressed
-					for (i = 0; i < 3; i++)
+					// whatever the reading is at, it's been there for longer
+					// than the debounce delay, so take it as the actual current state:
+					// if the button state has changed:
+					if (reading != playButtonState)
 					{
-						buttonState = digitalRead(playButtonPin);
-						if (buttonState == LOW)
-							btnCtr++;
-						delay(BTN_DELAY);
+						playButtonState = reading;
+						if (playButtonState == LOW)
+						{
+							if (cur_song.play_status == PAUSE)
+							{
+								playMe();
+								//pthread_mutex_lock(&cur_song.pauseMutex);
+								strcpy(cur_song.SecondRow_text, pause_text);
+								lcdPosition(lcdHandle, 0, 1);
+								lcdPuts(lcdHandle, lcd_clear);
+								scroll_SecondRow_flag = printLcdSecondRow();
+								//pthread_mutex_unlock(&cur_song.pauseMutex);
+							}
+							else
+							{
+								pauseMe();
+								// copy whatever is currently on the second row
+								//pthread_mutex_lock(&cur_song.pauseMutex);
+								strcpy(pause_text, cur_song.SecondRow_text);
+								strcpy(cur_song.SecondRow_text, "PAUSED");
+								strcpy(cur_song.prevArtist, cur_song.artist);
+								lcdPosition(lcdHandle, 0, 1);
+								lcdPuts(lcdHandle, lcd_clear);
+								scroll_SecondRow_flag = printLcdSecondRow();
+								//pthread_mutex_unlock(&cur_song.pauseMutex);
+							}
+						}
 					}
 				}
-				if (btnCtr >= 3)
-				{
-					if (cur_song.play_status == PAUSE)
-					{
-						playMe();
-						//pthread_mutex_lock(&cur_song.pauseMutex);
-						strcpy(cur_song.SecondRow_text, pause_text);
-						lcdPosition(lcdHandle, 0, 1);
-						lcdPuts(lcdHandle, lcd_clear);
-						scroll_SecondRow_flag = printLcdSecondRow();
-						//pthread_mutex_unlock(&cur_song.pauseMutex);
-					}
-					else
-					{
-						pauseMe();
-						// copy whatever is currently on the second row
-						//pthread_mutex_lock(&cur_song.pauseMutex);
-						strcpy(pause_text, cur_song.SecondRow_text);
-						strcpy(cur_song.SecondRow_text, "PAUSED");
-						strcpy(cur_song.prevArtist, cur_song.artist);
-						lcdPosition(lcdHandle, 0, 1);
-						lcdPuts(lcdHandle, lcd_clear);
-						scroll_SecondRow_flag = printLcdSecondRow();
-						//pthread_mutex_unlock(&cur_song.pauseMutex);
-					}
-				}
+				// save the reading. Next time through the loop, it'll be the lastButtonState:
+				lastPlayButtonState = reading;
 				// don't even check to see if the prev/next/info/quit buttons
 				// have been pressed if we are in a pause state.
 				if (cur_song.play_status != PAUSE)
@@ -900,94 +909,87 @@ int main(int argc, char **argv)
 					/*
 					 * Previous button
 					 */
-					btnCtr = 0;
-					buttonState = digitalRead(prevButtonPin);
-					if (buttonState == LOW)
+					reading = digitalRead(prevButtonPin);
+					if (reading != lastPrevButtonState)
+						lastPrevDebounceTime = millis();
+					if ((millis() - lastPrevDebounceTime) > debounceDelay)
 					{
-						for (i = 0; i < 3; i++)
+						if (reading != prevButtonState)
 						{
-							buttonState = digitalRead(prevButtonPin);
-							if (buttonState == LOW)
-								btnCtr++;
-							delay(BTN_DELAY);
+							prevButtonState = reading;
+							if (prevButtonState == LOW)
+							{
+								if (song_index - 1 != 0)
+								{
+									prevSong();
+									song_index--;
+								}
+							}
 						}
 					}
-					if (btnCtr >= 3)
-					{
-						if (song_index - 1 != 0)
-						{
-							prevSong();
-							song_index--;
-						}
-					}
+					lastPrevButtonState = reading;
 					/*
 					 * Next button
 					 */
-					btnCtr = 0;
-					buttonState = digitalRead(nextButtonPin);
-					if (buttonState == LOW)
+					reading = digitalRead(nextButtonPin);
+					if (reading != lastNextButtonState)
+						lastNextDebounceTime = millis();
+					if ((millis() - lastNextDebounceTime) > debounceDelay)
 					{
-						for (i = 0; i < 3; i++)
+						if (reading != nextButtonState)
 						{
-							buttonState = digitalRead(nextButtonPin);
-							if (buttonState == LOW)
-								btnCtr++;
-							delay(BTN_DELAY);
+							nextButtonState = reading;
+							if (nextButtonState == LOW)
+							{
+								if (song_index + 1 < num_songs)
+								{
+									nextSong();
+									song_index++;
+								}
+							}
 						}
 					}
-					if (btnCtr >= 3)
-					{
-						if (song_index + 1 < num_songs)
-						{
-							nextSong();
-							song_index++;
-						}
-					}
+					lastNextButtonState = reading;
 					/*
 					 * Info button
 					 */
-					btnCtr = 0;
-					buttonState = digitalRead(infoButtonPin);
-					if (buttonState == LOW)
+					reading = digitalRead(infoButtonPin);
+					if (reading != lastInfoButtonState)
+						lastInfoDebounceTime = millis();
+					if ((millis() - lastInfoDebounceTime) > debounceDelay)
 					{
-						for (i = 0; i < 3; i++)
+						if (reading != infoButtonState)
 						{
-							buttonState = digitalRead(infoButtonPin);
-							if (buttonState == LOW)
-								btnCtr++;
-							delay(BTN_DELAY);
+							infoButtonState = reading;
+							if (infoButtonState == LOW)
+							{
+								// toggle what to display
+								//pthread_mutex_lock(&cur_song.pauseMutex);
+								strcpy(cur_song.SecondRow_text, (strcmp(cur_song.SecondRow_text, cur_song.artist) == 0 ? cur_song.album : cur_song.artist));
+								// first clear just the second row, then re-display the second row
+								lcdPosition(lcdHandle, 0, 1);
+								lcdPuts(lcdHandle, lcd_clear);
+								scroll_SecondRow_flag = printLcdSecondRow();
+								//pthread_mutex_unlock(&cur_song.pauseMutex);
+							}
 						}
 					}
-					if (btnCtr >= 3)
-					{
-						// toggle what to display
-						//pthread_mutex_lock(&cur_song.pauseMutex);
-						strcpy(cur_song.SecondRow_text, (strcmp(cur_song.SecondRow_text, cur_song.artist) == 0 ? cur_song.album : cur_song.artist));
-						// first clear just the second row, then re-display the second row
-						lcdPosition(lcdHandle, 0, 1);
-						lcdPuts(lcdHandle, lcd_clear);
-						scroll_SecondRow_flag = printLcdSecondRow();
-						//pthread_mutex_unlock(&cur_song.pauseMutex);
-					}
+					lastInfoButtonState = reading;
 					/*
 					 * Quit button
 					 */
-					btnCtr = 0;
-					buttonState = digitalRead(quitButtonPin);
-					if (buttonState == LOW)
+					reading = digitalRead(quitButtonPin);
+					if (reading != lastQuitButtonState) lastQuitDebounceTime = millis();
+					if ((millis() - lastQuitDebounceTime) > debounceDelay)
 					{
-						for (i = 0; i < 3; i++)
+						if (reading != quitButtonState)
 						{
-							buttonState = digitalRead(quitButtonPin);
-							if (buttonState == LOW)
-								btnCtr++;
-							delay(BTN_DELAY);
+							quitButtonState = reading;
+							if (quitButtonState == LOW)
+								quitMe();
 						}
 					}
-					if (btnCtr >= 3)
-					{
-						quitMe();
-					}
+					lastQuitButtonState = reading;
 				}
 			}
 			// reset all the flags.
