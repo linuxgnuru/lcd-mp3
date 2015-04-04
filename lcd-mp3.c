@@ -709,16 +709,13 @@ int main(int argc, char **argv)
 		 *  i.e. in /etc/rc.local add:                     *
 		 *                                                 *
 		 *  /usr/local/bin/lcd-mp3 -usb 2>/dev/null        *
-		 *  or you can simply name the program lcd-mp3-usb *
-		 *  e.g.                                           *
-		 *  /usr/local/bin/lcd-mp3-usb 2>/dev/null         *
 		 *                                                 *
 		 *  if you wish the system to be able to be        *
 		 *  shutdown after it quits:                       *
 		 *                                                 *
 		 *  /usr/local/bin/lcd-mp3 -usb -halt 2>/dev/null  *
 		 ***************************************************/
-		else if (strcmp(argv[1], "-usb") == 0 || strcmp(argv[0], "lcd-mp3-usb") == 0)
+		else if (strcmp(argv[1], "-usb") == 0)
 		{
 			// First, check if USB is mounted.
 			mountFlag = checkMount();
