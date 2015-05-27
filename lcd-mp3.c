@@ -46,6 +46,7 @@
  *
  *	CHANGELOG
  *	---------
+ *	27-05-2015	Added some signal catching.
  *	04-04-2015	Trying new debounce.
  *	04-04-2015	Try to fix LCD bug
  *	03-04-2015	TODO find better way for debouncing buttons; maybe have to do in hardware.
@@ -99,6 +100,7 @@
 #include <string.h>
 #include <time.h>
 #include <libgen.h>
+#include <signal.h>
 
 // for mounting
 #include <sys/mount.h>
@@ -142,6 +144,22 @@ const int buttonPins[] = {
 	infoButtonPin,
 	quitButtonPin
 	};
+
+// for signal catching
+static void die(int sig)
+{
+	// Insert any GPIO cleaning here.
+	/*
+	int i;
+	for (i = 0; i < 8; i++)
+		digitalWrite(i, LOW);
+	*/
+	if (sig != 0 && sig != 2)
+	       	(void)fprintf(stderr, "caught signal %d\n", sig);
+	if (sig == 2)
+	       	(void)fprintf(stderr, "Exiting due to Ctrl + C\n");
+	exit(0);
+}
 
 int usage(const char *progName)
 {
@@ -748,6 +766,9 @@ int main(int argc, char **argv)
 	}
 	else
 		return usage(argv[0]);
+	// note: we're assuming BSD-style reliable signals here
+	(void)signal(SIGINT, die);
+	(void)signal(SIGHUP, die);
 	if (wiringPiSetup () == -1)
 	{
 		fprintf(stdout, "oops: %s\n", strerror(errno));
