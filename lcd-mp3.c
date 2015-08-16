@@ -46,6 +46,8 @@
  *
  *	CHANGELOG
  *	---------
+ *	16-08-2015	Fourth shuffle attempt
+ *	09-08-2015	More debuging work on shuffling
  *	08-08-2015	Third and possibly working random shuffle song option
  *	06-08-2015	Second attempt at random song option
  *	16-06-2015	First attempt at addition of a random song option.
@@ -128,7 +130,7 @@
 
 // Nice way to include debuging prints without having to keep commenting out lines
 // just have to comment out the following line:
-//#define DEBUG 1
+#define DEBUG 1
 
 // --------- END USER MODIFIABLE VARS ---------
 
@@ -136,9 +138,11 @@
 /*
  * Debounce tracking stuff
  */
-int  playButtonState,      prevButtonState,      nextButtonState,      infoButtonState,      quitButtonState, shufButtonState;
-int  lastPlayButtonState,  lastPrevButtonState,  lastNextButtonState,  lastInfoButtonState,  lastQuitButtonState, lastShufButtonState;
-long lastPlayDebounceTime, lastPrevDebounceTime, lastNextDebounceTime, lastInfoDebounceTime, lastQuitDebounceTime, lastShufDebounceTime;
+int  playButtonState, prevButtonState, nextButtonState, infoButtonState, quitButtonState, shufButtonState;
+int  lastPlayButtonState, lastPrevButtonState, lastNextButtonState, lastInfoButtonState,
+     lastQuitButtonState, lastShufButtonState;
+long lastPlayDebounceTime, lastPrevDebounceTime, lastNextDebounceTime, lastInfoDebounceTime,
+     lastQuitDebounceTime, lastShufDebounceTime;
 long debounceDelay = 50;
 
 const int numButtons = 6;
@@ -180,6 +184,7 @@ int usage(const char *progName)
 		"-dir [dir] \n"
 		"-songs [MP3 files]\n"
 		"-usb (this reads in any music found in /MUSIC)\n"
+		"-shuffle (shuffles playlist)\n"
 		"-halt (this is only if -usb is also used;\n"
 		"       allows the program to halt the system after\n"
 		"       the 'quit' button was pressed.)\n",
@@ -308,8 +313,10 @@ playlist_t reReadPlaylist(char *dir_name)
 	d = opendir(dir_name);
 	if (d)
 	{
+		// FIXME add a way to only read in mp3 files.
 		while ((dir = readdir(d)) != NULL)
 		{
+			// 8 = normal file; non-directory
 			if (dir->d_type == 8)
 			{
 				index = (index == 0 ? 1 : index);
@@ -330,57 +337,58 @@ playlist_t reReadPlaylist(char *dir_name)
 	return new_playlist;
 }
 
-// for shuffle playlist
-//void swap(char *a, char *b)
-//{
-//	char temp = *a;
-//	*a = *b;
-//	*b = temp;
-//}
-
-void swap(int *a, int *b)
+// convert linked list into array
+void ll2array(playlist_t *playlistptr, char **arr)
 {
-	int temp = *a;
-	*a = *b;
-	*b = temp;
-}
+	int i;
+	playlist_node_t *cur;
 
-void randomize(int playlist_num[]) // int n not needed; n = num_songs which is global
-{
-	int i, j;
-
-	srand(time(NULL));
-	for (i = num_songs - 1; i > 0; i--)
+	for (i = 0, cur = *playlistptr; cur != NULL; i++, cur = cur->nextptr)
 	{
-		j = rand() % (i + 1);
-		swap(&playlist_num[i], &playlist_num[j]);
+		if (cur->songptr != NULL)
+			arr[i] = cur->songptr;
+		//strcpy(arr[i], (char *)cur->songptr);
 	}
 }
 
-/*
-
-playlist_t shufflePlaylist(playlist_t cur_playlist)
+// shuffle / randomize playlist
+playlist_t randomize(playlist_t cur_playlist) // int n not needed; n = num_songs which is global
 {
-	int index = 0;
+	char *tmp[MAXDATALEN];
 	char *string;
 	playlist_t new_playlist;
-	playlist_node_t *cur, *prev, *new;
+	int index = 0;
 
-	playlist_init(&new_playlist);
-	for (cur = prev = cur_playlist; cur != NULL; prev = cur, cur = cur->nextptr)
+	ll2array(&cur_playlist, tmp);
+	srand((unsigned)time(NULL));
+	if (num_songs > 1)
 	{
-	  if (cur->index == index)
-	  {
-	  }
-	//	playlist_add_song(index++, string, &new_playlist);
+		size_t i;
+		for (i = 0; i < num_songs - 1; i++)
+		{
+			if (strlen(tmp[i]) > 3)
+			{
+				size_t j = i + rand() / (RAND_MAX / (num_songs - i) + 1);
+				char *t = tmp[j];
+				tmp[j] = tmp[i];
+				tmp[i] = t;
+			}
+		}
 	}
-  //
-  // FIXME
-  //
-  // 1) create a way to "shuffle" the songs; check what you did with the bathroom solitaire game on the mac
-  return shuffled_playlist;
+	// convert array back into linked list.
+	playlist_init(&new_playlist);
+	index = 0;
+	while (index < num_songs)
+	{
+		string = malloc(MAXDATALEN);
+		if (string == NULL)
+			perror("malloc: shuffle");
+		strcpy(string, tmp[index]);
+		playlist_add_song(index, string, &new_playlist);
+		index++;
+	}
+	return new_playlist;
 }
-*/
 
 /*
  * Threading functions
@@ -720,7 +728,7 @@ void play_song(void *arguments)
 	{
 		args->play_status = PLAY;
 	}
-	cur_status.song_over = TRUE;
+	cur_status.song_over = TRUE; // FIXME only time cur_status is used?!
 	pthread_mutex_unlock(&(cur_song.writeMutex));
 }
 
@@ -735,9 +743,6 @@ int main(int argc, char **argv)
 	char *string;
 	char pause_text[MAXDATALEN];
 	char lcd_clear[] = "                ";
-	//int *playlist_num;
-	int playlist_num[256]; // FIXME limit the number of songs in playlist to 256
-	int playlist_num_index;
 	int index;
 	int song_index;
 	int i;
@@ -760,7 +765,6 @@ int main(int argc, char **argv)
 	playlist_init(&cur_playlist);
 	playlist_init(&init_playlist);
 	ctrSecondRowScroll = 0;
-	playlist_num_index = 0;
 	cur_song.song_over = FALSE;
 	scroll_FirstRow_flag = scroll_SecondRow_flag = FALSE;
 	lastPlayButtonState = lastPrevButtonState =
@@ -779,7 +783,7 @@ int main(int argc, char **argv)
 		{
 			if (strcmp(argv[i], "-shuffle") == 0)
 			{
-			  shuffFlag = TRUE;
+				shuffFlag = TRUE;
 			}
 		}
 		if (strcmp(argv[1], "-pins") == 0)
@@ -850,22 +854,11 @@ int main(int argc, char **argv)
 			mountFlag = MOUNTED;
 		}
 		else
-			return usage(argv[0]);
+			if (shuffFlag == FALSE)
+				return usage(argv[0]);
 	}
 	else
 		return usage(argv[0]);
-#ifdef DEBUG
-	if (shuffFlag == TRUE)
-		printf("shuffle on\n");
-#endif
-	// create array of song numbers
-	/*
-	playlist_num = malloc(num_songs);
-	if (playlist_num == NULL)
-		perror("malloc: playlist_num");
-	*/
-	for (i = 0; i < num_songs; i++)
-		playlist_num[i] = i;
 	// note: we're assuming BSD-style reliable signals here
 	(void)signal(SIGINT, die);
 	(void)signal(SIGHUP, die);
@@ -888,46 +881,20 @@ int main(int argc, char **argv)
 	song_index = 1;
 	if (shuffFlag == TRUE)
 	{
-		//cur_playlist = shufflePlaylist(init_playlist);
-		randomize(playlist_num);
-		cur_playlist = init_playlist;
-#ifdef DEBUG
-		for (i = 0; i < num_songs; i++)
-		{
-			string = malloc(MAXDATALEN);
-			if (string == NULL)
-				perror("malloc: song string");
-			playlist_get_song(playlist_num[i], (void **) &string, &cur_playlist);
-			if (string != NULL)
-			{
-				printf("[%d] %s\n", playlist_num[i], string);
-			}
-		}
-#endif
+		cur_playlist = randomize(init_playlist);
 	}
 	else
 	{
-	  cur_playlist = init_playlist;
+		cur_playlist = init_playlist;
 	}
-	//cur_playlist = init_playlist;
 	cur_song.play_status = PLAY;
 	strcpy(cur_song.prevTitle, cur_song.title);
 	strcpy(cur_song.prevArtist, cur_song.artist);
 	while (cur_song.play_status != QUIT) // && song_index < num_songs)
 	{
 		// loop playlist; reset song to begining of list
-		if (shuffFlag == FALSE && song_index > num_songs)
+		if (song_index > num_songs)
 			song_index = 1;
-		if (shuffFlag == TRUE)
-		{
-			// reset / loop playlist
-			if (playlist_num_index >= num_songs)
-				playlist_num_index = 0;
-			song_index = playlist_num[playlist_num_index++];
-#ifdef DEBUG
-			printf("random song num: %d\n", song_index);
-#endif
-		}
 		string = malloc(MAXDATALEN);
 		if (string == NULL)
 			perror("malloc: song string");
@@ -1090,6 +1057,7 @@ int main(int argc, char **argv)
 							prevButtonState = reading;
 							if (prevButtonState == LOW)
 							{
+								// FIXME this doesn't allow for looping
 								if (song_index - 1 != 0)
 								{
 									prevSong();
@@ -1112,17 +1080,8 @@ int main(int argc, char **argv)
 							nextButtonState = reading;
 							if (nextButtonState == LOW)
 							{
+								// FIXME this currently won't let you loop
 								if (song_index + 1 < num_songs)
-								{
-									if (shuffFlag == TRUE)
-										song_index = 0;
-									else
-									{
-										nextSong();
-										song_index++;
-									}
-								}
-								if (shuffFlag == TRUE)
 								{
 									nextSong();
 									song_index++;
@@ -1182,7 +1141,6 @@ int main(int argc, char **argv)
 							shufButtonState = reading;
 							if (shufButtonState == LOW)
 							{
-								//free(playlist_num);
 								// toggle shuffle state
 								if (shuffFlag == TRUE)
 								{
@@ -1191,18 +1149,14 @@ int main(int argc, char **argv)
 								else
 								{
 									shuffFlag = TRUE;
-									/*
-									playlist_num = malloc(num_songs);
-									if (playlist_num == NULL)
-										perror("malloc: playlist_num");
-										*/
-									for (i = 0; i < num_songs; i++)
-										playlist_num[i] = i;
-									randomize(playlist_num);
+									// TODO
+								        // having this here may or may not
+									// kill everything in the entire world
+									pthread_mutex_lock(&cur_song.pauseMutex);
+									cur_playlist = randomize(init_playlist);
+									cur_song.song_over = TRUE;
+									pthread_mutex_unlock(&cur_song.pauseMutex);
 								}
-#ifdef DEBUG
-								printf("shuffle\n");
-#endif
 							}
 						}
 					}
@@ -1240,7 +1194,6 @@ int main(int argc, char **argv)
 			cur_song.song_over = FALSE;
 			pthread_mutex_unlock(&cur_song.pauseMutex);
 		}
-		//free(string);
 	}
 	if (mountFlag == MOUNT_ERROR)
 	{
@@ -1296,7 +1249,7 @@ int main(int argc, char **argv)
 			}
 			else
 			{
-				// FIXME Maybe instead of getting here, we might just repeat the song list somehow?
+				// TODO Maybe instead of getting here, we might just repeat the song list somehow?
 				lcdPosition(lcdHandle, 0, 0);
 				lcdPuts(lcdHandle, "No more songs.");
 				lcdPosition(lcdHandle, 0, 1);
