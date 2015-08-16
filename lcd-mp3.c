@@ -23,10 +23,6 @@
  *	  time to go through the lib sources to try to find out what's going on; so I always just run the
  *	  program with 2>/dev/null (e.g. lcd-mp3-usb 2>/dev/null)
  *
- * Unknown issues:
- *
- *	- see recusion
- *
  * -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  *
  *	Requires:
@@ -44,57 +40,7 @@
  *
  * -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  *
- *	CHANGELOG
- *	---------
- *	16-08-2015	Fourth shuffle attempt
- *	09-08-2015	More debuging work on shuffling
- *	08-08-2015	Third and possibly working random shuffle song option
- *	06-08-2015	Second attempt at random song option
- *	16-06-2015	First attempt at addition of a random song option.
- *	27-05-2015	Added some signal catching.
- *	04-04-2015	Trying new debounce.
- *	04-04-2015	Try to fix LCD bug
- *	03-04-2015	FIXME find better way for debouncing buttons; maybe have to do in hardware.
- *	03-04-2015	Changed shutdown/halt option (now you have to add -halt) Also tried to fix scrolling text
- *			delay.  Song file names with spaces seem to work; wonder what else is wrong.
- *			- FIXME - found odd bug; sometimes when paused, and is then unpaused the text gets glitchy.
- *	31-01-2015	Setting up for final project.
- *			Things to be done:
- *				- Remove all ncurses / terminal output
- *				- Change -dir and -songs to -d and -s and --dir= and --songs=
- *				- FIXME song file names that have a space kill this... find out why
- *				- On startup, (assuming the /etc/fstab has already mounted a USB drive (/dev/sda1)
- *				  to /MUSIC) check /MUSIC and load in all music.
- *				- if Quit button is pressed, display "QUIT - Shutdown" and "PAUSE - Cancel"
- *	27-01-2015	Removed the LEDs from below...
- *	25-01-2015	Added some LEDs to also indicate when paused and if info is on or not
- *	07-12-2014	Added the PAUSED text to the LCD when paused and disabled all other buttons while paused.
- *			FIXME need to allow user to quit program while paused. Removed unused/debug code
- *	06-12-2014	see if we can do something about the song being paused while next/prev/quit/info
- *			buttons are pressed
- *	05-12-2014	Minor changes; removed btnFlag
- *	02-12-2014	Removed everything regarding debouncing function; going back to old delay setup
- *	02-12-2014	Removed debouncing function and added it manually; having too many odd
- *			struct errors
- *	29-11-2014	Tons of modifications:
- *			- added a mount/unmount USB (assuming /dev/sda1) option
- *			- added more argument options such as whole dir, and mount usb
- *			- worked with another way to debounce buttons
- *	28-11-2014	added some help
- *	25-11-2014	attempt to add button support
- *	22-11-2014	moved from an array of songs to a linked list (playlist) of songs.
- *	18-11-2014	lots of re-work, added more info to curses display and the ability to
- *			swap what is shown on the second row; album vs artist
- *	17-11-2014	attempt to add previous song
- *	17-11-2014	added quit
- *	16-11-2014	added skip song / next song
- *	14-11-2014	added ability to pause thread/song; using ncurses, got keboard commands
- *	12-11-2014	added playback of multiple songs
- *	10-11-2014	added ID3 parsing of MP3 file
- *	04-11-2014	made the song playing part a thread
- *	02-11-2014	able to play a mp3 file using mpg123 and ao libraries
- *	28-10-2014	worked on scrolling text on lcd
- *
+ * Changelog is now in its own file ChangeLog
  */
 
 #include <stdio.h>
@@ -409,6 +355,17 @@ void prevSong()
 	pthread_mutex_unlock(&cur_song.pauseMutex);
 }
 
+/* TODO
+ * having this may or may not kill everything in the entire world
+*/
+void shuffleMe()
+{
+	pthread_mutex_lock(&cur_song.pauseMutex);
+	cur_song.play_status = SHUFFLE;
+	cur_song.song_over = TRUE;
+	pthread_mutex_unlock(&cur_song.pauseMutex);
+}
+
 void quitMe()
 {
 	pthread_mutex_lock(&cur_song.pauseMutex);
@@ -711,7 +668,7 @@ void play_song(void *arguments)
 		checkPause();
 		ao_play(dev, (char *) buffer, done);
 		// stop playing if the user pressed quit, next, or prev buttons
-		if (cur_song.play_status == QUIT || cur_song.play_status == NEXT || cur_song.play_status == PREV)
+		if (cur_song.play_status == QUIT || cur_song.play_status == NEXT || cur_song.play_status == PREV || cur_song.play_status == SHUFFLE)
 			break;
 	}
 	// clean up
@@ -724,7 +681,7 @@ void play_song(void *arguments)
 	pthread_mutex_lock(&(cur_song.writeMutex));
 	args->song_over = TRUE;
 	// only set the status to play if the song finished normally
-	if (cur_song.play_status != QUIT && cur_song.play_status != NEXT && cur_song.play_status != PREV)
+	if (cur_song.play_status != QUIT && cur_song.play_status != NEXT && cur_song.play_status != PREV && cur_song.play_status != SHUFFLE)
 	{
 		args->play_status = PLAY;
 	}
@@ -1040,7 +997,7 @@ int main(int argc, char **argv)
 				}
 				// save the reading. Next time through the loop, it'll be the lastButtonState:
 				lastPlayButtonState = reading;
-				// don't even check to see if the prev/next/info/quit buttons
+				// don't even check to see if the prev/next/info/quit/shuffle buttons
 				// have been pressed if we are in a pause state.
 				if (cur_song.play_status != PAUSE)
 				{
@@ -1059,10 +1016,10 @@ int main(int argc, char **argv)
 							{
 								// FIXME this doesn't allow for looping
 								if (song_index - 1 != 0)
-								{
-									prevSong();
 									song_index--;
-								}
+								else
+									song_index = num_songs - 1;
+								prevSong();
 							}
 						}
 					}
@@ -1082,10 +1039,10 @@ int main(int argc, char **argv)
 							{
 								// FIXME this currently won't let you loop
 								if (song_index + 1 < num_songs)
-								{
-									nextSong();
 									song_index++;
-								}
+								else
+									song_index = 1;
+								nextSong();
 							}
 						}
 					}
@@ -1142,21 +1099,11 @@ int main(int argc, char **argv)
 							if (shufButtonState == LOW)
 							{
 								// toggle shuffle state
-								if (shuffFlag == TRUE)
-								{
-									shuffFlag = FALSE;
-								}
-								else
-								{
-									shuffFlag = TRUE;
-									// TODO
-								        // having this here may or may not
-									// kill everything in the entire world
-									pthread_mutex_lock(&cur_song.pauseMutex);
-									cur_playlist = randomize(init_playlist);
-									cur_song.song_over = TRUE;
-									pthread_mutex_unlock(&cur_song.pauseMutex);
-								}
+							        // (NOTE: shuffFlag is useless here)
+								shuffFlag = (shuffFlag == TRUE ? FALSE : TRUE);
+								// the following function signals to go to next song
+								// and sets the play status to SHUFFLE
+								shuffleMe();
 							}
 						}
 					}
@@ -1183,13 +1130,19 @@ int main(int argc, char **argv)
 			pthread_mutex_unlock(&cur_song.pauseMutex);
 			song_index++;
 		}
-		else if (cur_song.song_over == TRUE && (cur_song.play_status == NEXT || cur_song.play_status == PREV))
+		// reset everything if next, prev, or shuffle buttons were pressed
+		else if (cur_song.song_over == TRUE && (cur_song.play_status == NEXT || cur_song.play_status == PREV || cur_song.play_status == SHUFFLE))
 		{
 			pthread_mutex_lock(&cur_song.pauseMutex);
 			// empty out song/artist data
 			strcpy(cur_song.title, "");
 			strcpy(cur_song.artist, "");
 			strcpy(cur_song.album, "");
+			if (cur_song.play_status == SHUFFLE)
+			{
+				cur_playlist = (shuffFlag == TRUE ? randomize(init_playlist) : init_playlist);
+				song_index = 1;
+			}
 			cur_song.play_status = PLAY;
 			cur_song.song_over = FALSE;
 			pthread_mutex_unlock(&cur_song.pauseMutex);

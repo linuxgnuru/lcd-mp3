@@ -43,6 +43,7 @@ typedef enum {
 	PAUSE,
 	INFO,
 	STOP,
+	SHUFFLE,
 	QUIT
 } status_enum;
 
