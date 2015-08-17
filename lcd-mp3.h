@@ -23,9 +23,10 @@
 // Mount enum
 typedef enum {
 	UNMOUNTED,
-	MOUNTED,
-	MOUNT_ERROR
-} mount_enum;
+	FILES_OK,
+	MOUNT_ERROR,
+	NO_FILES
+} filestatus_enum;
 
 typedef enum {
 	TITLE,
@@ -103,12 +104,12 @@ static const char *spaces = "                    ";
 const int BS = 4;	// Bits (4 or 8)
 const int CO = 16;	// Number of columns
 const int RO = 2;	// Number of rows
-const int RS = 3;	// 
-const int EN = 14;	// 
-const int D0 = 4;	// 
-const int D1 = 12;	// 
-const int D2 = 13;	// 
-const int D3 = 6;	// 
+const int RS = 3;	// GPIO 3
+const int EN = 14;	// SCK (SPI)
+const int D0 = 4;	// GPIO 4
+const int D1 = 12;	// MOSI (SPI)
+const int D2 = 13;	// MISO (SPI)
+const int D3 = 6;	// GPIO 6
 
 // Global lcd handle:
 static int lcdHandle;
