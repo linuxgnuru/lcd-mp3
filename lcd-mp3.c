@@ -78,6 +78,21 @@
 #define quitButtonPin   7 // GPIO 7, BCM  4
 #define shufButtonPin  11 // CE1,    BCM  7
 
+// The following is used to test to see if the LCD/button board is attached or not.
+#define boardTestPin   10 // CE0,    BCM  8
+
+// Pins for the LCD display
+const int BS = 4;	// Bits (4 or 8)
+const int CO = 16;	// Number of columns
+const int RO = 2;	// Number of rows
+
+const int RS = 3;	// GPIO 3
+const int EN = 14;	// SCK (SPI)
+const int D0 = 4;	// GPIO 4
+const int D1 = 12;	// MOSI (SPI)
+const int D2 = 13;	// MISO (SPI)
+const int D3 = 6;	// GPIO 6
+
 #define BTN_DELAY 30
 
 //#define DEBUG 0
@@ -98,6 +113,10 @@ const int numButtons = 6;
 
 const int buttonPins[] = { playButtonPin, prevButtonPin, nextButtonPin, infoButtonPin, quitButtonPin, shufButtonPin };
 
+/*
+ * System stuff
+ */
+
 // For signal catching
 static void die(int sig)
 {
@@ -111,6 +130,15 @@ static void die(int sig)
   exit(0);
 }
 
+// Wall everyone that system is shutting down
+void wall(char *msg)
+{
+    char message[80];
+    sprintf(message, "echo %s | wall", msg);
+    system(message);
+}
+
+// Print usage
 int usage(const char *progName)
 {
   fprintf(stderr, "Usage: %s [OPTION] \n"
@@ -267,7 +295,7 @@ playlist_t reReadPlaylist(char *dir_name)
   }
   closedir(d);
   pthread_mutex_lock(&cur_song.pauseMutex);
-  num_songs = index;
+  num_songs = index - 1;
   pthread_mutex_unlock(&cur_song.pauseMutex);
   return new_playlist;
 }
@@ -806,9 +834,12 @@ int main(int argc, char **argv)
   }
   else
     return usage(argv[0]);
+
+  // Catch signals
   // NOTE: We're assuming BSD-style reliable signals here
   (void)signal(SIGINT, die);
   (void)signal(SIGHUP, die);
+  (void)signal(SIGTERM, die);
   if (wiringPiSetup () == -1)
   {
     fprintf(stdout, "oops: %s\n", strerror(errno));
@@ -820,15 +851,47 @@ int main(int argc, char **argv)
     fprintf(stderr, "%s: lcdInit failed\n", argv[0]);
     return -1;
   }
+  // Setup buttons
+  for (i = 0; i < numButtons; i++)
+  {
+    pinMode(buttonPins[i], INPUT);
+    pullUpDnControl(buttonPins[i], PUD_UP);
+  }
+  // Setup board test
+  pinMode(boardTestPin, INPUT);
+  pullUpDnControl(boardTestPin, PUD_UP);
+  // Test to see if the display/buttons are attached.
+  // CE0 is unused; so on the pcb attach CE0 to ground
+  if (digitalRead(boardTestPin) == HIGH)
+  {
+    // TODO See if there's a better way to do this.
+    //printf("LCD / buttons not found.\n");
+    lcdClear(lcdHandle);
+    lcdPosition(lcdHandle, 0, 0);
+    lcdPuts(lcdHandle, "LCD not plugged in");
+    lcdPosition(lcdHandle, 0, 1);
+    if (haltFlag == TRUE)
+    {
+      //printf("Shutting down.\n");
+      wall("LCD / buttons not found. Shutting down.");
+      lcdPuts(lcdHandle, "Shutting down.");
+      delay(1000);
+      system("shutdown -h now");
+    }
+    else
+    {
+      lcdPuts(lcdHandle, "Please shutdown.");
+      //printf("Please shutdown.\n");
+      wall("LCD / buttons not found. Please shutdown.");
+    }
+  }
   if (playlistStatusErr == FILES_OK)
   {
-    for (i = 0; i < numButtons; i++)
-    {
-      pinMode(buttonPins[i], INPUT);
-      pullUpDnControl(buttonPins[i], PUD_UP);
-    }
     song_index = 1;
-    cur_playlist = (shuffFlag == TRUE ? randomize(init_playlist) : init_playlist);
+    if (shuffFlag == TRUE)
+      cur_playlist = randomize(init_playlist);
+    else
+      cur_playlist = init_playlist;
     cur_song.play_status = PLAY;
     strcpy(cur_song.prevTitle, cur_song.title);
     strcpy(cur_song.prevArtist, cur_song.artist);
@@ -1092,8 +1155,8 @@ int main(int argc, char **argv)
               }
             }
             lastShufButtonState = reading;
-          }
-        }
+          } // end ! pause
+        } // end while
         // Reset all the flags.
         scroll_FirstRow_flag = scroll_SecondRow_flag = FALSE;
         pauseScroll_FirstRow_Flag = pauseScroll_SecondRow_Flag = FALSE;
@@ -1124,7 +1187,10 @@ int main(int argc, char **argv)
         strcpy(cur_song.album, "");
         if (cur_song.play_status == SHUFFLE)
         {
-          cur_playlist = (shuffFlag == TRUE ? randomize(init_playlist) : init_playlist);
+          if (shuffFlag == TRUE)
+            cur_playlist = randomize(init_playlist);
+          else
+            cur_playlist = init_playlist;
           song_index = 1;
         }
         cur_song.play_status = PLAY;

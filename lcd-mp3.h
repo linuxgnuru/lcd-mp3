@@ -86,7 +86,7 @@ struct play_status {
 	int song_over;
 }; struct play_status cur_status;
 
-// Musical note
+// Musical note char for LCD
 static unsigned char musicNote[8] = {
 	0b01111,
 	0b01001,
@@ -98,18 +98,8 @@ static unsigned char musicNote[8] = {
 	0b00000,
 };
 
+// Spaces is used by the LCD display for scrolling
 static const char *spaces = "                    ";
-
-// Variables for the LCD display
-const int BS = 4;	// Bits (4 or 8)
-const int CO = 16;	// Number of columns
-const int RO = 2;	// Number of rows
-const int RS = 3;	// GPIO 3
-const int EN = 14;	// SCK (SPI)
-const int D0 = 4;	// GPIO 4
-const int D1 = 12;	// MOSI (SPI)
-const int D2 = 13;	// MISO (SPI)
-const int D3 = 6;	// GPIO 6
 
 // Global lcd handle:
 static int lcdHandle;

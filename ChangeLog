@@ -1,3 +1,7 @@
+19-08-2015  Added test to see if LCD/buttons are attached or not using pin CE0 as input.  (Solder wire from CE0 to ground)
+Also added a wall function to alert anyone logged on that the system is shutting down. Added the catching of SIGTERM signal.
+NOTE: Should really standardize this ChangeLog
+18-08-2015  Found yet another bug with the shuffle crashing; fixed now
 17-08-2015	Fixed bug with mounting/no songs to load when no usb is inserted; also changed the formatting of the source
 16-08-2015	Finalized shuffle. Shuffle button toggles the shuffling of the playlist;
 fixed prev/next so they now loop
