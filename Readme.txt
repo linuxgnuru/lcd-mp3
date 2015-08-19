@@ -1,6 +1,6 @@
 LCD MP3 player for Raspberry Pi
 
-NOTE: In order to compile, you will need to install the following packages: libao libao-common libao-dev libmpg123 libmpg123-dev mpg321
+NOTE: In order to run the binary only, you'll need to install libao4 and libao-common.  In order to compile, you will need to install the following packages: libao libao-common libao-dev libmpg123 libmpg123-dev mpg321
 
 You'll also need wiringPi which can be found here: http://wiringpi.com/download-and-install/
 
