@@ -1,3 +1,5 @@
+20-08-2015  Added check to only play files with the .mp3 extension
+19-08-2015  Added binary to github
 19-08-2015  Added test to see if LCD/buttons are attached or not using pin CE0 as input.  (Solder wire from CE0 to ground)
 Also added a wall function to alert anyone logged on that the system is shutting down. Added the catching of SIGTERM signal.
 NOTE: Should really standardize this ChangeLog

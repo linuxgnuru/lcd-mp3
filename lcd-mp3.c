@@ -43,7 +43,7 @@
  *
  * -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  *
- * NOTE: Changelog is now in its own file ChangeLog
+ * NOTE: Changelog is now in its own file, 'ChangeLog'
  *
  * -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
  */
@@ -130,7 +130,7 @@ static void die(int sig)
   exit(0);
 }
 
-// Wall everyone that system is shutting down
+// Message everyone that system is shutting down
 void wall(char *msg)
 {
     char message[80];
@@ -236,6 +236,15 @@ int playlist_add_song(int index, void *songptr, playlist_t *playlistptr)
       prev->nextptr = new;
   }
   return 1;
+}
+
+// Get the extension
+const char *get_filename_ext(const char *filename)
+{
+    const char *dot = strrchr(filename, '.');
+    if (!dot || dot == filename)
+        return "";
+    return dot + 1;
 }
 
 // Get song name from playlist with index
@@ -840,7 +849,7 @@ int main(int argc, char **argv)
   (void)signal(SIGINT, die);
   (void)signal(SIGHUP, die);
   (void)signal(SIGTERM, die);
-  if (wiringPiSetup () == -1)
+  if (wiringPiSetup() == -1)
   {
     fprintf(stdout, "oops: %s\n", strerror(errno));
     return 1;
@@ -913,9 +922,19 @@ int main(int argc, char **argv)
       if (string != NULL)
       {
         basec = strdup(string);
+        // Get just the filename, strip the path info and extension
         bname = basename(basec);
         strcpy(cur_song.filename, string);
         strcpy(cur_song.base_filename, bname);
+        strcpy(cur_song.ext, get_filename_ext(bname));
+        // Make sure we only mess with mp3 files
+        if (strcasecmp(cur_song.ext, "mp3") != 0)
+        {
+            pthread_mutex_lock(&cur_song.pauseMutex);
+            cur_song.play_status = NEXT;
+            cur_song.song_over = TRUE;
+            pthread_mutex_unlock(&cur_song.pauseMutex);
+        }
         // See if we can get the song info from the file.
         id3_tagger();
         // Play the song as a thread
