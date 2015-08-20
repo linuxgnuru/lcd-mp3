@@ -1,5 +1,6 @@
  == 2.07 (20-08-2015) ==
     - Added the ability to go through any subdirectories on the USB device
+
  == 2.06 (20-08-2015) ==
     - Added check to only play files with the .mp3 extension
     - Changed the look and feel of the ChangeLog
