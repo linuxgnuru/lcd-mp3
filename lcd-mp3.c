@@ -61,6 +61,9 @@
 // For mounting
 #include <sys/mount.h>
 #include <dirent.h> 
+// For subdirectory searching
+#include <limits.h>
+#include <sys/types.h>
 
 // For wiringPi
 #include <wiringPi.h>
@@ -112,6 +115,9 @@ long debounceDelay = 50;
 const int numButtons = 6;
 
 const int buttonPins[] = { playButtonPin, prevButtonPin, nextButtonPin, infoButtonPin, quitButtonPin, shufButtonPin };
+
+static int Index = 0;
+static playlist_t Tmp_Playlist;
 
 /*
  * System stuff
@@ -273,7 +279,93 @@ int playlist_get_song(int index, void **songptr, playlist_t *playlistptr)
  * Creates playlist
  */
 
+// Recursive function to enter sub directories
+void list_dir(const char *dir_name)
+{
+    DIR *d;
+    char *basec, *bname;
+    char *string;
+
+    d = opendir(dir_name);
+    if (!d)
+    {
+        fprintf(stderr, "Cannot open directory '%s': %s\n", dir_name, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    while (1)
+    {
+        struct dirent *dir;
+        const char *d_name;
+
+        dir = readdir(d);
+        // There are no more entries in this directory, so break out of the while loop.
+        if (!dir)
+            break;
+        d_name = dir->d_name;
+        // 8 = normal file; non-directory
+        if (dir->d_type == 8)
+        {
+            string = malloc(MAXDATALEN);
+            if (string == NULL)
+                perror("malloc: reReadPlaylist");
+            strcpy(string, dir_name);
+            strcat(string, "/");
+            strcat(string, d_name);
+            // Get just the filename, strip the path info
+            basec = strdup(string);
+            bname = basename(basec);
+            // Make sure we only add mp3 files
+            if (strcasecmp(get_filename_ext(bname), "mp3") == 0)
+                playlist_add_song(Index++, string, &Tmp_Playlist); // TODO I REALLY hate having to use global variables...
+        }
+        if (dir->d_type & DT_DIR)
+        {
+            // Check that the directory is not "d" or d's parent.
+            if (strcmp(d_name, "..") != 0 && strcmp(d_name, ".") != 0)
+            {
+                int path_length;
+                char path[PATH_MAX];
+
+                path_length = snprintf(path, PATH_MAX, "%s/%s", dir_name, d_name);
+                if (path_length >= PATH_MAX)
+                {
+                    fprintf(stderr, "Path length has become too long.\n");
+                    exit(EXIT_FAILURE);
+                }
+                list_dir(path); // Recursively call "list_dir" with the new path.
+            }
+        } // end if dir
+    } // end while
+    if (closedir(d))
+    {
+        fprintf(stderr, "Could not close '%s': %s\n", dir_name, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+}
+
+// Create the playlist; NOTE Now we read in sub directories...
+// Tmp_Playlist and Index are global vars...
+playlist_t reReadPlaylist(char *dir_name)
+{
+    playlist_t new_playlist;
+
+    playlist_init(&new_playlist);
+    playlist_init(&Tmp_Playlist);
+    Index = 0;
+    list_dir(dir_name);
+    new_playlist = Tmp_Playlist;
+    playlist_init(&Tmp_Playlist);
+    pthread_mutex_lock(&cur_song.pauseMutex);
+    num_songs = Index - 1;
+    pthread_mutex_unlock(&cur_song.pauseMutex);
+    return new_playlist;
+}
+
 // If USB has been mounted, load in songs.
+
+// NOTE -- OLD METHOD --
+
+#if 0
 playlist_t reReadPlaylist(char *dir_name)
 {
   int index = 0;
@@ -314,6 +406,7 @@ playlist_t reReadPlaylist(char *dir_name)
   pthread_mutex_unlock(&cur_song.pauseMutex);
   return new_playlist;
 }
+#endif
 
 // Convert linked list into array
 void ll2array(playlist_t *playlistptr, char **arr)
@@ -910,6 +1003,24 @@ int main(int argc, char **argv)
     cur_song.play_status = PLAY;
     strcpy(cur_song.prevTitle, cur_song.title);
     strcpy(cur_song.prevArtist, cur_song.artist);
+#if 0
+    for (song_index = 1; song_index < num_songs; song_index++)
+    {
+      string = malloc(MAXDATALEN);
+      if (string == NULL)
+        perror("malloc: song string");
+      playlist_get_song(song_index, (void **) &string, &cur_playlist);
+      if (string != NULL)
+      {
+        printf("file: %s\n", string);
+        /*
+        basec = strdup(string);
+        bname = basename(basec);
+        strcpy(cur_song.filename, string);
+        strcpy(cur_song.base_filename, bname);
+        */
+    }
+#endif
     /*
      * The below was once part of the while loop but I took it out so the playlist can loop.
      * TODO maybe in the future, add it as an option if you don't want it to loop?
