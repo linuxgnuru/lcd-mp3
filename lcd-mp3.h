@@ -60,7 +60,6 @@ typedef playlist_node_t *playlist_t;
 struct song_info {
 	char base_filename[MAXDATALEN];
 	char filename[MAXDATALEN];
-    char ext[MAXDATALEN]; // TODO maybe change this to just 4?
 	char title[MAXDATALEN];
 	char artist[MAXDATALEN];
 	char genre[MAXDATALEN];

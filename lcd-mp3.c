@@ -154,6 +154,16 @@ int usage(const char *progName)
   return EXIT_FAILURE;
 }
 
+// Get the extension
+const char *get_filename_ext(const char *filename)
+{
+    const char *dot = strrchr(filename, '.');
+    if (!dot || dot == filename)
+        return "";
+    return dot + 1;
+}
+
+
 /*
  * Mounting function; might use it in the future
  */
@@ -238,15 +248,6 @@ int playlist_add_song(int index, void *songptr, playlist_t *playlistptr)
   return 1;
 }
 
-// Get the extension
-const char *get_filename_ext(const char *filename)
-{
-    const char *dot = strrchr(filename, '.');
-    if (!dot || dot == filename)
-        return "";
-    return dot + 1;
-}
-
 // Get song name from playlist with index
 int playlist_get_song(int index, void **songptr, playlist_t *playlistptr)
 {
@@ -280,12 +281,12 @@ playlist_t reReadPlaylist(char *dir_name)
   playlist_t new_playlist;
   DIR *d;
   struct dirent *dir;
+  char *basec, *bname;
 
   playlist_init(&new_playlist);
   d = opendir(dir_name);
   if (d)
   {
-    // FIXME STAR STAR STAR!!!  Add a way to only read in mp3 files.
     while ((dir = readdir(d)) != NULL)
     {
       // 8 = normal file; non-directory
@@ -298,7 +299,12 @@ playlist_t reReadPlaylist(char *dir_name)
         strcpy(string, dir_name);
         strcat(string, "/");
         strcat(string, dir->d_name);
-        playlist_add_song(index++, string, &new_playlist);
+        // Get just the filename, strip the path info and extension
+        basec = strdup(string);
+        bname = basename(basec);
+        // Make sure we only deal with mp3 files
+        if (strcasecmp(get_filename_ext(bname), "mp3") == 0)
+            playlist_add_song(index++, string, &new_playlist);
       }
     }
   }
@@ -926,15 +932,6 @@ int main(int argc, char **argv)
         bname = basename(basec);
         strcpy(cur_song.filename, string);
         strcpy(cur_song.base_filename, bname);
-        strcpy(cur_song.ext, get_filename_ext(bname));
-        // Make sure we only mess with mp3 files
-        if (strcasecmp(cur_song.ext, "mp3") != 0)
-        {
-            pthread_mutex_lock(&cur_song.pauseMutex);
-            cur_song.play_status = NEXT;
-            cur_song.song_over = TRUE;
-            pthread_mutex_unlock(&cur_song.pauseMutex);
-        }
         // See if we can get the song info from the file.
         id3_tagger();
         // Play the song as a thread
@@ -1014,9 +1011,6 @@ int main(int argc, char **argv)
                 scrollMessage_SecondRow(&pauseScroll_SecondRow_Flag);
             }
           }
-          /*
-           * Play / Pause button
-           */
            /*
             * NOTE:
             * I got the following debouncing code from
@@ -1029,6 +1023,9 @@ int main(int argc, char **argv)
             * modified 28 Dec 2012 by Mike Walters
             * This example code is in the public domain.
             */
+          /*
+           * Play / Pause button
+           */
           reading = digitalRead(playButtonPin);
           // Check to see if you just pressed the button 
           // (i.e. the input went from HIGH to LOW),  and you've waited 
