@@ -99,6 +99,7 @@ static unsigned char musicNote[8] = {
 };
 
 // Spaces is used by the LCD display for scrolling
+                           //12345678901234567890
 static const char *spaces = "                    ";
 
 // Global lcd handle:

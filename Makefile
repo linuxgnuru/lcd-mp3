@@ -1,8 +1,8 @@
 CC=gcc
 CFLAGS=-c -Wall -g -O3
-LDFLAGS=-lao -lmpg123 -lpthread -lm -lwiringPi -lwiringPiDev 
+LDFLAGS=-lao -lmpg123 -lpthread -lm -lwiringPi -lwiringPiDev -lasound
 BIN=lcd-mp3
-SRC=$(BIN).c
+SRC=$(BIN).c rotaryencoder.c
 OBJ=$(SRC:.c=.o)
 
 all: $(SRC) $(BIN)

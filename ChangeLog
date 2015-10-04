@@ -1,3 +1,10 @@
+ == 2.08 (13-09-2015) ==
+    - Another huge update; added a rotary encoder for volume control.
+    - Rotary encoder uses 3 pins, using RxD, TxD, and SDA.  Now the only pin left unused is SCL from I2C.
+    - Now requires libasound to compile.
+    - The rotary encoder and volume control was borrowed from the MPD player found here:
+      http://theatticlight.net/posts/My-Embedded-Music-Player-and-Sound-Server
+
  == 2.07 (20-08-2015) ==
     - Added the ability to go through any subdirectories on the USB device
 
